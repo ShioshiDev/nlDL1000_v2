@@ -1,0 +1,5 @@
+To fix the display offset error, modify the u8x8_d_ssd1306_128x64_noname.c file in the U8g2 library
+and correct the default_x_offset parameter to 0 instead of 2 int u8x8_sh1106_128x64_noname_display_info constructor
+
+Also the current way of setting LED colours ignores the on/off state of an LED and will set it's colour in both the LED's memory and the FastLED strip. 
+So if you want it to be off but set the colour and toggle it on later immediately set the state off or just use black and colours to toggle on/off.

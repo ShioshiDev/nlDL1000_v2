@@ -1,0 +1,10 @@
+{
+    "config": {
+        "model": "DL1000",
+        "version": "1.0.0",
+        "description": "This is a test configuration file for the DL1000 model."
+    },
+    "time": {
+        "timezone": "GMT0"
+    }
+}
