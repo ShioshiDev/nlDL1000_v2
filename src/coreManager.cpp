@@ -132,17 +132,26 @@ void coreLoop()
 
 String getMacAddress()
 {
-	uint8_t base_mac_addr[6];
-	esp_efuse_mac_get_default(base_mac_addr);
 	String macAddress = "";
-	for (int i = 0; i < 6; i++)
+	uint8_t base_mac_addr[6];
+	esp_err_t er = esp_efuse_mac_get_default(base_mac_addr);
+	if (er != ESP_OK)
 	{
-		char hexByte[3];
-		sprintf(hexByte, "%02X", base_mac_addr[i]);
-		macAddress += hexByte;
-		if(i < 5)
+		DEBUG_PRINTLN("Failed to get MAC address");
+		macAddress = "00:00:00:00:00:00"; // Default MAC address if retrieval fails
+		return macAddress;
+	}
+	else
+	{
+		for (int i = 0; i < 6; i++)
 		{
-			macAddress += ":";
+			char hexByte[3];
+			sprintf(hexByte, "%02X", base_mac_addr[i]);
+			macAddress += hexByte;
+			if (i < 5)
+			{
+				macAddress += ":";
+			}
 		}
 	}
 	return macAddress;
@@ -150,76 +159,86 @@ String getMacAddress()
 
 String getSerialNumber()
 {
-	// Get base MAC address
-	uint8_t base_mac_addr[6] = {0};
-	esp_efuse_mac_get_default(base_mac_addr);
+	String serialNumber = "00000000"; // Default MAC address if retrieval fails
+	String macAddress = getMacAddress();
 
-	// Create a unique input combining MAC and device model
-	String combinedInput = DEVICE_NAME;
-	for (int i = 0; i < 6; i++)
+	if (macAddress == "00:00:00:00:00:00")
 	{
-		char hexByte[3];
-		sprintf(hexByte, "%02X", base_mac_addr[i]);
-		combinedInput += hexByte;
+		DEBUG_PRINTLN("Failed to get MAC address");
+		return serialNumber;
 	}
-
-	// Setup SHA-256 hash
-	mbedtls_md_context_t ctx;
-	mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
-	unsigned char hash[32]; // SHA-256 outputs 32 bytes
-
-	mbedtls_md_init(&ctx);
-	mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 0);
-	mbedtls_md_starts(&ctx);
-	mbedtls_md_update(&ctx, (const unsigned char *)combinedInput.c_str(), combinedInput.length());
-	mbedtls_md_finish(&ctx, hash);
-	mbedtls_md_free(&ctx);
-
-	// Convert first 6 bytes of hash to uint64_t (48 bits)
-	uint64_t value = 0;
-	for (int i = 0; i < 6; i++)
+	else
 	{
-		value = (value << 8) | hash[i];
+		const uint64_t BASE36_MOD = 2821109907456ULL; // 36^8
+		const char *B36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+		// Create a unique input combining MAC and device model
+		// 1) Input = model salt + MAC (maximizes uniqueness per model)
+		String in = DEVICE_NAME;
+		in += macAddress;
+
+		// 2) SHA-256
+		unsigned char hash[32];
+		const mbedtls_md_info_t *info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+		if (!info)
+			return String("ERRMD000");
+
+		mbedtls_md_context_t ctx;
+		mbedtls_md_init(&ctx);
+		if (mbedtls_md_setup(&ctx, info, 0) != 0 ||
+			mbedtls_md_starts(&ctx) != 0 ||
+			mbedtls_md_update(&ctx, (const unsigned char *)in.c_str(), in.length()) != 0 ||
+			mbedtls_md_finish(&ctx, hash) != 0)
+		{
+			mbedtls_md_free(&ctx);
+			return String("ERRMD001");
+		}
+		mbedtls_md_free(&ctx);
+
+		// 3) Reduce FULL digest modulo 36^8 for uniform 8-char space
+		uint64_t mod = 0;
+		for (int i = 0; i < 32; ++i)
+		{
+			mod = (((mod << 8) % BASE36_MOD) + hash[i]) % BASE36_MOD;
+		}
+
+		// 4) Base36 encode to exactly 8 chars
+		char out[9];
+		out[8] = '\0';
+		for (int i = 7; i >= 0; --i)
+		{
+			out[i] = B36[mod % 36];
+			mod /= 36;
+		}
+		serialNumber = String(out); // e.g., "3F8K1Z0Q"
+		return serialNumber;
 	}
-
-	// Convert to base36 (alphanumeric, case-insensitive)
-	const char *base36Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-	char buffer[9]; // 8 chars + null terminator
-	buffer[8] = '\0';
-
-	for (int i = 7; i >= 0; i--)
-	{
-		buffer[i] = base36Chars[value % 36];
-		value /= 36;
-	}
-
-	return String(buffer);
 }
 
 void initDisplay()
 {
 	if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE)
 	{
-	hwDisplay.begin();
+		hwDisplay.begin();
 
-	hwDisplay.firstPage();
-	do
-	{
-		int strWidth = 0;
-		hwDisplay.setFont(u8g_font_unifont);
-		hwDisplay.drawStr(0, 20, DEVICE_FRIENDLY_ID);
-		hwDisplay.drawHLine(4, 22, 120);
-		hwDisplay.setFont(u8g2_font_5x7_tr);
-		hwDisplay.drawStr(4, 40, "Firmware Version: ");
-		strWidth = hwDisplay.getStrWidth(displayViewModel.version);
-		hwDisplay.drawStr((128 - strWidth - 4), 40, displayViewModel.version);
-		hwDisplay.drawStr(4, 50, "MAC: ");
-		strWidth = hwDisplay.getStrWidth(displayViewModel.mac);
-		hwDisplay.drawStr((128 - strWidth - 4), 50, displayViewModel.mac);
-		hwDisplay.drawStr(4, 60, "Serial Number: ");
-		strWidth = hwDisplay.getStrWidth(displayViewModel.serial);
-		hwDisplay.drawStr((128 - strWidth - 4), 60, displayViewModel.serial);
-	} while (hwDisplay.nextPage());
+		hwDisplay.firstPage();
+		do
+		{
+			int strWidth = 0;
+			hwDisplay.setFont(u8g_font_unifont);
+			hwDisplay.drawStr(0, 20, DEVICE_FRIENDLY_ID);
+			hwDisplay.drawHLine(4, 22, 120);
+			hwDisplay.setFont(u8g2_font_5x7_tr);
+			hwDisplay.drawStr(4, 40, "Firmware Version: ");
+			strWidth = hwDisplay.getStrWidth(displayViewModel.version);
+			hwDisplay.drawStr((128 - strWidth - 4), 40, displayViewModel.version);
+			hwDisplay.drawStr(4, 50, "MAC: ");
+			strWidth = hwDisplay.getStrWidth(displayViewModel.mac);
+			hwDisplay.drawStr((128 - strWidth - 4), 50, displayViewModel.mac);
+			hwDisplay.drawStr(4, 60, "Serial Number: ");
+			strWidth = hwDisplay.getStrWidth(displayViewModel.serial);
+			hwDisplay.drawStr((128 - strWidth - 4), 60, displayViewModel.serial);
+		} while (hwDisplay.nextPage());
 		xSemaphoreGive(i2cMutex);
 	}
 	else
