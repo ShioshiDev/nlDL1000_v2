@@ -27,6 +27,7 @@ BlockNot tmrCheckConnectivity = BlockNot(CHECK_INTERNET_INTERVAL);
 
 DeviceStatus statusDevice = DEVICE_STARTED;
 NetworkStatus statusNetwork = NETWORK_STOPPED;
+ServiceStatus statusService = SERVICE_DISCONNECTED;
 
 StatusViewModel displayViewModel;
 DisplayMode displayMode = NORMAL;
@@ -39,6 +40,7 @@ SemaphoreHandle_t displayModelMutex;
 
 SemaphoreHandle_t statusDeviceMutex;
 SemaphoreHandle_t statusNetworkMutex;
+SemaphoreHandle_t statusServiceMutex;
 
 // Core Setup and Loop Functions ----------------------------------------------------------
 
@@ -50,6 +52,7 @@ void coreSetup()
 		.serial = DEVICE_SERIAL.c_str(),
 		.statusDevice = &statusDevice,
 		.statusNetwork = &statusNetwork,
+		.statusService = &statusService,
 		.status = "Initializing"};
 
 	// Create Mutexes
@@ -57,6 +60,7 @@ void coreSetup()
 	displayModelMutex = xSemaphoreCreateMutex();
 	statusDeviceMutex = xSemaphoreCreateMutex();
 	statusNetworkMutex = xSemaphoreCreateMutex();
+	statusServiceMutex = xSemaphoreCreateMutex();
 
 	// Initialize hardware components
 	DEBUG_PRINTLN(F("... Initializing I2C Bus"));
@@ -106,25 +110,11 @@ void coreLoop()
 	// Check for keypad events but handle them in the event handler
 	keypad.getKey();
 
-	// Check internet connectivity
-	if (statusNetwork == NETWORK_CONNECTED_INTERNET)
-		if (tmrCheckConnectivity.TRIGGERED)
-			if (testNetworkConnection("www.novalogic.io"))
-				if (Ethernet1.hasIP())
-					setNeworkStatus(NETWORK_CONNECTED_INTERNET);
-				else
-				{
-					if (statusNetwork >= NETWORK_CONNECTED_IP)
-						setNeworkStatus(NETWORK_CONNECTED_IP);
+	// Network connectivity and services are now handled entirely in TaskNetworkManager
+	// This reduces main loop complexity and provides better state management
 
-					startPingChecker();
-				}
-
-	// Send keep alive signal
-	if (statusNetwork == NETWORK_CONNECTED_INTERNET)
-		if (tmrKeepAlive.TRIGGERED)
-			keepAliveNovaLogic();
-
+	// MQTT service loop is called here to handle message processing
+	// but connection management is handled in the network task
 	mqttServiceLoop();
 }
 

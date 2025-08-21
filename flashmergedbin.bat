@@ -20,7 +20,7 @@ python "C:\Users\Shioshi\.platformio\packages\tool-esptoolpy@src-2ee4b59ebe07187
   --flash_mode dio ^
   --flash_size 8MB ^
   --flash_freq 80m ^
-  0x0 merged-flash.bin
+  0x0 nlDL1000_Factory.bin
 
 if %ERRORLEVEL% NEQ 0 (
   echo.

@@ -3,7 +3,7 @@
 #define __DEFINITIONS_H__
 
 // Firmware Version Information -----------------------------------------------------------
-#define FIRMWARE_VERSION                "1.0.2" // Current Firmware Version in format X.YY.ZZ
+#define FIRMWARE_VERSION                "1.0.3" // Current Firmware Version in format X.YY.ZZ
 
 // Device Name for Identification ---------------------------------------------------------
 #define DEVICE_NAME                     "DL1000"
@@ -68,13 +68,16 @@
 #define LCD_VER_RES                     64
 
 // Interval Definitions -------------------------------------------------------------------
-#define DISPLAY_UPDATE_INTERVAL         250
-#define LED_UPDATE_INTERVAL             100
-#define KEEP_ALIVE_INTERVAL             10000
-#define CHECK_INTERNET_INTERVAL         10000
+#define DISPLAY_UPDATE_INTERVAL         250   // 250 milliseconds
+#define LED_UPDATE_INTERVAL             100   // 100 milliseconds
+#define KEEP_ALIVE_INTERVAL             10000 // 10 seconds
+#define CHECK_INTERNET_INTERVAL         2500  // 2.5 seconds
+#define CHECK_INTERNET_INTERVAL_FAST    5000  // 5 seconds (when connection issues)
+#define CHECK_INTERNET_INTERVAL_SLOW    30000 // 30 seconds (when stable)
+#define CHECK_SERVICES_INTERVAL         10000 // 10 seconds
 #define TAGO_UPDATE_INTERVAL            60000 // 60 seconds
-#define MODBUS_ACTIVITY_INTERVAL        2500
-#define MODBUS_VALIDITY_INTERVAL        250
+#define MODBUS_ACTIVITY_INTERVAL        2500  // 2.5 seconds
+#define MODBUS_VALIDITY_INTERVAL        250   // 250 milliseconds
 
 // RGB LED Definitions --------------------------------------------------------------------
 #define RGBLED_COUNT                    3
@@ -116,7 +119,15 @@ enum NetworkStatus {
     NETWORK_NOT_CONNECTED,
     NETWORK_CONNECTED,
     NETWORK_CONNECTED_IP,
-    NETWORK_CONNECTED_INTERNET
+    NETWORK_CONNECTED_INTERNET,
+    NETWORK_CONNECTED_SERVICES  // Renamed from MQTT to reflect broader service connectivity
+};
+
+enum ServiceStatus {
+    SERVICE_DISCONNECTED,
+    SERVICE_CONNECTING,
+    SERVICE_CONNECTED,
+    SERVICE_ERROR
 };
 
 // Structure Definitions ------------------------------------------------------------------
@@ -127,6 +138,7 @@ typedef struct  {
 
 	DeviceStatus *statusDevice;
 	NetworkStatus *statusNetwork;
+	ServiceStatus *statusService;
 	char status[16]; 
 } StatusViewModel;
 

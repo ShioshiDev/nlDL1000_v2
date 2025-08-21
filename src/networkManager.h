@@ -46,7 +46,9 @@ void publishOTAStatus(const char *message);
 void keepAliveNovaLogic();
 void keepAliveRouterUDP();
 void checkInternetConnectivity();
+void checkServiceConnectivity();
 void setNeworkStatus(NetworkStatus status);
+void setServiceStatus(ServiceStatus status);
 void restartEthernetPort();
 
 #endif // __NETWORKMANAGER_H__

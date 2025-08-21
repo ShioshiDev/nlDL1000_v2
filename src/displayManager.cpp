@@ -111,7 +111,19 @@ void updateDisplayNormal()
 			hwDisplay.setBitmapMode(1);
 			hwDisplay.drawXBM(1, 48, 17, 16, bitImage_CloudSync);
 			if(*displayViewModel.statusDevice == DEVICE_STARTED)
-				hwDisplay.drawStr(28, 58, "Internet Connected");
+			{
+				if(*displayViewModel.statusService == SERVICE_CONNECTED)
+					hwDisplay.drawStr(28, 58, "Services Connected");
+				else
+					hwDisplay.drawStr(28, 58, "Internet Connected");
+			}
+		}
+		if(*displayViewModel.statusNetwork == NETWORK_CONNECTED_SERVICES)
+		{
+			hwDisplay.setBitmapMode(1);
+			hwDisplay.drawXBM(1, 48, 17, 16, bitImage_CloudSync);
+			if(*displayViewModel.statusDevice == DEVICE_STARTED)
+				hwDisplay.drawStr(28, 58, "Services Connected");
 		}
 		
 		if(*displayViewModel.statusDevice >= DEVICE_UPDATING)

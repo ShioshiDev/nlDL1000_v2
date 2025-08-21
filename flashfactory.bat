@@ -21,7 +21,7 @@ python "C:\Users\Shioshi\.platformio\packages\tool-esptoolpy@src-2ee4b59ebe07187
   write_flash ^
   --flash_mode dio ^
   --flash_freq 80m ^
-  0x30000 %BUILD_DIR%\firmware.bin
+  0x430000 %BUILD_DIR%\firmware.bin
 
 if %ERRORLEVEL% NEQ 0 (
   echo.
