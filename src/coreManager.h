@@ -9,6 +9,8 @@
 #include <Keypad.h>
 #include <BlockNot.h>
 #include "LittleFS.h"
+#include "esp_partition.h"
+#include "esp_ota_ops.h"
 
 #include "definitions.h"
 #include "displayManager.h"
@@ -25,8 +27,12 @@ void initDisplay();
 void initLEDs();
 bool initRTC();
 
+void updateKeyPad();
 void keypadEvent(KeypadEvent key);
 void onKeyRelease(KeypadEvent key);
+void onKeyPress(KeypadEvent key);
+void checkFactoryResetCombo();
+void performFactoryReset();
 
 void showSerialMenu();
 void handleOption1();

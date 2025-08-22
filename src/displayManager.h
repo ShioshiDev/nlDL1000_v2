@@ -21,5 +21,6 @@ void updateDisplay();
 
 void updateDisplayNormal();
 void updateDisplayMenu();
+void updateDisplayFactoryResetConfirm();
 
 #endif // __DISPLAYMANAGER_H__

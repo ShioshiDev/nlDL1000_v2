@@ -4,6 +4,7 @@ extern U8G2_SH1106_128X64_NONAME_1_HW_I2C hwDisplay;
 
 extern StatusViewModel displayViewModel;
 extern DisplayMode displayMode;
+extern uint8_t factoryResetSelection;
 
 extern QueueHandle_t displayQueueHandle;
 extern SemaphoreHandle_t i2cMutex;
@@ -31,6 +32,10 @@ void updateDisplay()
 			else if (displayMode == MENU)
 			{
 				updateDisplayMenu();
+			}
+			else if (displayMode == FACTORY_RESET_CONFIRM)
+			{
+				updateDisplayFactoryResetConfirm();
 			}
 			xSemaphoreGive(displayModelMutex);
 		}
@@ -137,4 +142,53 @@ void updateDisplayNormal()
 
 void updateDisplayMenu()
 {
+}
+
+void updateDisplayFactoryResetConfirm()
+{
+	hwDisplay.firstPage();
+	do
+	{
+		hwDisplay.setFont(u8g_font_unifont);
+		hwDisplay.drawStr(15, 15, "FACTORY RESET");
+		
+		hwDisplay.setFont(u8g2_font_5x7_tr);
+		hwDisplay.drawStr(10, 28, "Restore factory firmware");
+		hwDisplay.drawStr(10, 38, "and erase all data?!");
+		
+		hwDisplay.drawHLine(5, 45, 118);
+		
+		// Draw Cancel button
+		if (factoryResetSelection == 0)
+		{
+			// Selected - draw with background
+			hwDisplay.setDrawColor(1);
+			hwDisplay.drawBox(15, 52, 35, 12);
+			hwDisplay.setDrawColor(0);
+			hwDisplay.drawStr(18, 60, "CANCEL");
+			hwDisplay.setDrawColor(1);
+		}
+		else
+		{
+			// Not selected - normal text
+			hwDisplay.drawStr(18, 60, "CANCEL");
+		}
+		
+		// Draw Confirm button
+		if (factoryResetSelection == 1)
+		{
+			// Selected - draw with background
+			hwDisplay.setDrawColor(1);
+			hwDisplay.drawBox(75, 52, 40, 12);
+			hwDisplay.setDrawColor(0);
+			hwDisplay.drawStr(78, 60, "CONFIRM");
+			hwDisplay.setDrawColor(1);
+		}
+		else
+		{
+			// Not selected - normal text
+			hwDisplay.drawStr(78, 60, "CONFIRM");
+		}
+				
+	} while (hwDisplay.nextPage());
 }

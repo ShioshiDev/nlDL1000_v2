@@ -19,12 +19,14 @@ extern EthernetClass Ethernet1;
 
 void TaskNetworkManager(void *pvParameters);
 
-void initEthernetPorts();
+void initEthernet();
+void restartEthernet();
 
 void onNetworkEvent(arduino_event_id_t event, arduino_event_info_t info);
 void startIPReceivedChecker();
 static void onWaitForIPTimeout(void *arg);
 void startPingChecker();
+void stopAllNetworkTimers();
 static void onWaitForPingTimeout(void *arg);
 void printEthernetStatus(EthernetClass &eth);
 void printEthernetStatus();
@@ -46,9 +48,8 @@ void publishOTAStatus(const char *message);
 void keepAliveNovaLogic();
 void keepAliveRouterUDP();
 void checkInternetConnectivity();
-void checkServiceConnectivity();
+void cleanupNetworkServices();
 void setNeworkStatus(NetworkStatus status);
 void setServiceStatus(ServiceStatus status);
-void restartEthernetPort();
 
 #endif // __NETWORKMANAGER_H__

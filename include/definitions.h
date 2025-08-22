@@ -3,7 +3,7 @@
 #define __DEFINITIONS_H__
 
 // Firmware Version Information -----------------------------------------------------------
-#define FIRMWARE_VERSION                "1.0.3" // Current Firmware Version in format X.YY.ZZ
+#define FIRMWARE_VERSION                "1.0.4" // Current Firmware Version in format X.YY.ZZ
 
 // Device Name for Identification ---------------------------------------------------------
 #define DEVICE_NAME                     "DL1000"
@@ -97,7 +97,8 @@
 // Enum Definitions -----------------------------------------------------------------------
 enum DisplayMode {
 	NORMAL = 1,
-	MENU = 2
+	MENU = 2,
+	FACTORY_RESET_CONFIRM = 3
 };
 
 enum LEDIndex

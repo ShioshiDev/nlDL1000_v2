@@ -21,8 +21,6 @@ unsigned long lastKeepAlive = 0;
 const unsigned long keepAliveInterval = 10000; // 10 seconds
 unsigned long lastConnectivityPing = 0;
 unsigned long connectivityPingInterval = CHECK_INTERNET_INTERVAL_FAST; // Start with fast checking
-unsigned long lastServiceCheck = 0;
-const unsigned long serviceCheckInterval = CHECK_SERVICES_INTERVAL; // 10 seconds
 unsigned long stableConnectionStartTime = 0;
 const unsigned long stableConnectionThreshold = 60000; // 1 minute of stable connection before switching to slow polling
 
@@ -46,8 +44,8 @@ void TaskNetworkManager(void *pvParameters)
 	for (;;)
 	{
 		current_time = millis();
-		
-		// Handle network connectivity monitoring
+
+		// Only run network monitoring if we have IP address
 		if (statusNetwork >= NETWORK_CONNECTED_IP)
 		{
 			// Check internet connectivity with adaptive polling
@@ -56,35 +54,31 @@ void TaskNetworkManager(void *pvParameters)
 				checkInternetConnectivity();
 				lastConnectivityPing = current_time;
 			}
-			
+
 			// Send UDP keep-alive to router
 			keepAliveRouterUDP();
 		}
-		
-		// Handle service connectivity monitoring
+
+		// Only run MQTT service if we have confirmed internet connectivity
 		if (statusNetwork >= NETWORK_CONNECTED_INTERNET)
 		{
-			// Check service connectivity (MQTT, etc.)
-			if (current_time - lastServiceCheck > serviceCheckInterval)
-			{
-				checkServiceConnectivity();
-				lastServiceCheck = current_time;
-			}
-			
-			// Send MQTT keep-alive
+			// Process MQTT messages and handle reconnection
+			mqttServiceLoop();
+
+			// Send MQTT keep-alive periodically
 			if (current_time - lastKeepAlive > keepAliveInterval)
 			{
 				keepAliveNovaLogic();
 				lastKeepAlive = current_time;
 			}
 		}
-		
-		taskYIELD();   // Yield to other tasks
-		vTaskDelay(100); // Reduced delay for more responsive network monitoring
+
+		taskYIELD();	 // Yield to other tasks
+		vTaskDelay(100); // Responsive monitoring
 	}
 }
 
-void initEthernetPorts()
+void initEthernet()
 {
 	SPI.begin(BOARD_PIN_SCK, BOARD_PIN_MISO, BOARD_PIN_MOSI);
 
@@ -99,10 +93,18 @@ void initEthernetPorts()
 	udp.begin(8888);
 }
 
+void restartEthernet()
+{
+	Ethernet1.end();
+	ethernetDriver1.end();
+	vTaskDelay(PORT_RECYCLE_INTERVAL / portTICK_PERIOD_MS);
+	initEthernet();
+}
+
 void onNetworkEvent(arduino_event_id_t event, arduino_event_info_t info)
 {
 	arduino_event_info_t eventInfo = arduino_event_info_t(info);
-	// DEBUG_PRINTLN("Network Event: " + String(event));
+
 	switch (event)
 	{
 	case ARDUINO_EVENT_ETH_START:
@@ -113,6 +115,7 @@ void onNetworkEvent(arduino_event_id_t event, arduino_event_info_t info)
 			Ethernet1.setHostname(ethHostname1);
 		}
 		break;
+
 	case ARDUINO_EVENT_ETH_CONNECTED:
 		if (eventInfo.eth_connected == Ethernet1.getEthHandle())
 		{
@@ -121,6 +124,7 @@ void onNetworkEvent(arduino_event_id_t event, arduino_event_info_t info)
 			startIPReceivedChecker();
 		}
 		break;
+
 	case ARDUINO_EVENT_ETH_GOT_IP:
 		if (strcmp(esp_netif_get_desc(eventInfo.got_ip.esp_netif), "eth1") == 0)
 		{
@@ -128,17 +132,18 @@ void onNetworkEvent(arduino_event_id_t event, arduino_event_info_t info)
 			DEBUG_PRINTLN(Ethernet1);
 			routerIP = Ethernet1.gatewayIP();
 			setNeworkStatus(NETWORK_CONNECTED_IP);
+			// Start ping checker to verify internet connectivity
 			startPingChecker();
 		}
 		break;
+
 	case ARDUINO_EVENT_ETH_LOST_IP:
 		if (statusNetwork >= NETWORK_CONNECTED_IP)
 		{
 			DEBUG_PRINTLN("Ethernet 1 Lost IP");
-			// When we lose IP, we definitely lose services
-			setServiceStatus(SERVICE_DISCONNECTED);
-			hasInitializedMQTT = false; // Force MQTT reinitialization when IP is restored
-			
+			// Clean shutdown when we lose IP
+			cleanupNetworkServices();
+
 			if (Ethernet1.linkStatus() == LinkON)
 				setNeworkStatus(NETWORK_CONNECTED);
 			else
@@ -146,21 +151,22 @@ void onNetworkEvent(arduino_event_id_t event, arduino_event_info_t info)
 			startIPReceivedChecker();
 		}
 		break;
+
 	case ARDUINO_EVENT_ETH_DISCONNECTED:
 		DEBUG_PRINTLN("Ethernet 1 Disconnected");
-		// When ethernet disconnects, we lose all services
-		setServiceStatus(SERVICE_DISCONNECTED);
-		hasInitializedMQTT = false; // Force MQTT reinitialization when reconnected
+		// Clean shutdown when ethernet disconnects
+		cleanupNetworkServices();
 		setNeworkStatus(NETWORK_NOT_CONNECTED);
 		startIPReceivedChecker();
 		break;
+
 	case ARDUINO_EVENT_ETH_STOP:
 		DEBUG_PRINTLN("Ethernet 1 Stopped");
-		// When ethernet stops, we lose all services
-		setServiceStatus(SERVICE_DISCONNECTED);
-		hasInitializedMQTT = false; // Force MQTT reinitialization when restarted
+		// Clean shutdown when ethernet stops
+		cleanupNetworkServices();
 		setNeworkStatus(NETWORK_STOPPED);
 		break;
+
 	default:
 		break;
 	}
@@ -188,13 +194,20 @@ static void onWaitForIPTimeout(void *arg)
 	if (statusNetwork == NETWORK_CONNECTED)
 	{
 		ESP_LOGW(TAG, "No IP address on eth0 after 15s, restarting Ethernet port 0");
-		restartEthernetPort();
+		restartEthernet();
 	}
 	isWaitingForIP = false;
 }
 
 void startPingChecker()
 {
+	// Don't start ping checker if ethernet is not connected
+	if (Ethernet1.linkStatus() != LinkON)
+	{
+		DEBUG_PRINTLN("Ethernet not connected, skipping ping checker");
+		return;
+	}
+
 	if (statusNetwork >= NETWORK_CONNECTED_IP)
 	{
 		if (!isWaitingForPing)
@@ -226,9 +239,66 @@ void startPingChecker()
 	}
 }
 
+void stopAllNetworkTimers()
+{
+	// Stop IP waiting timer
+	if (tmrWaitForIP && isWaitingForIP)
+	{
+		esp_timer_stop(tmrWaitForIP);
+		isWaitingForIP = false;
+		DEBUG_PRINTLN("Stopped IP waiting timer");
+	}
+
+	// Stop ping waiting timer
+	if (tmrWaitForPing && isWaitingForPing)
+	{
+		esp_timer_stop(tmrWaitForPing);
+		isWaitingForPing = false;
+		DEBUG_PRINTLN("Stopped ping waiting timer");
+	}
+
+	// Reset ping retry counter
+	pingRetry = 0;
+
+	// Reset adaptive polling to fast mode for next connection
+	connectivityPingInterval = CHECK_INTERNET_INTERVAL_FAST;
+	stableConnectionStartTime = 0;
+
+	DEBUG_PRINTLN("All network timers stopped and counters reset");
+}
+
+void cleanupNetworkServices()
+{
+	// Stop all network monitoring timers
+	stopAllNetworkTimers();
+
+	// Disconnect MQTT gracefully if connected
+	if (mqttClientNovaLogic.connected())
+	{
+		DEBUG_PRINTLN("Disconnecting MQTT client gracefully");
+		mqttClientNovaLogic.disconnect();
+	}
+
+	// Mark services as disconnected
+	setServiceStatus(SERVICE_DISCONNECTED);
+
+	// Reset MQTT initialization flag
+	hasInitializedMQTT = false;
+
+	DEBUG_PRINTLN("Network services cleanup completed");
+}
+
 static void onWaitForPingTimeout(void *arg)
 {
 	isWaitingForPing = false;
+
+	// Don't retry ping if ethernet is disconnected
+	if (Ethernet1.linkStatus() != LinkON)
+	{
+		DEBUG_PRINTLN("Ethernet disconnected, skipping ping retry");
+		return;
+	}
+
 	if (statusNetwork <= NETWORK_CONNECTED_IP)
 	{
 		DEBUG_PRINTLN("No ping received after 10s, restarting ping test.");
@@ -242,7 +312,7 @@ static void onWaitForPingTimeout(void *arg)
 		else
 		{
 			DEBUG_PRINTF("Ping test failed after %d retries, restarting Ethernet port 1.\n", pingMaxRetry);
-			restartEthernetPort();
+			restartEthernet();
 			pingRetry = 0;
 		}
 	}
@@ -316,6 +386,13 @@ bool testNetworkConnection(const char *host)
 {
 	bool isConnected = false;
 
+	// Double-check: need both ethernet link AND IP address
+	if (Ethernet1.linkStatus() != LinkON || !Ethernet1.hasIP())
+	{
+		DEBUG_PRINTLN(F("Ethernet disconnected or no IP, skipping network test."));
+		return false;
+	}
+
 	if (statusNetwork < NETWORK_CONNECTED_IP)
 	{
 		DEBUG_PRINTLN(F("No network connection, skipping test."));
@@ -341,27 +418,24 @@ bool testNetworkConnection(const char *host)
 
 void mqttServiceLoop()
 {
-	if (statusNetwork >= NETWORK_CONNECTED_INTERNET)
+	// Initialize MQTT service if not done yet
+	if (!hasInitializedMQTT)
 	{
-		if (hasInitializedMQTT == false)
-		{
-			DEBUG_PRINTLN("Initializing MQTT Service...");
-			mqttServiceInit();
-			hasInitializedMQTT = true;
-			setServiceStatus(SERVICE_CONNECTING);
-		}
-
-		// Connection management is now handled in checkServiceConnectivity()
-		// Just process messages here
-		mqttClientNovaLogic.loop();
+		DEBUG_PRINTLN("Initializing MQTT Service...");
+		mqttServiceInit();
+		hasInitializedMQTT = true;
+		setServiceStatus(SERVICE_CONNECTING);
 	}
-	else
+
+	// Process MQTT messages
+	mqttClientNovaLogic.loop();
+
+	// Handle reconnection if disconnected
+	if (!mqttClientNovaLogic.connected() && statusService != SERVICE_CONNECTING)
 	{
-		// No internet connection, ensure MQTT is marked as disconnected
-		if (hasInitializedMQTT && statusService != SERVICE_DISCONNECTED)
-		{
-			setServiceStatus(SERVICE_DISCONNECTED);
-		}
+		DEBUG_PRINTLN("MQTT disconnected, attempting reconnection...");
+		setServiceStatus(SERVICE_CONNECTING);
+		mqttClientNovaLogic.begin();
 	}
 }
 
@@ -382,7 +456,8 @@ void initNovaLogicServices()
 	{
 		DEBUG_PRINTLN("MQTT connected to NovaLogic broker!");
 		setServiceStatus(SERVICE_CONNECTED);
-		setNeworkStatus(NETWORK_CONNECTED_SERVICES); // Update network status to reflect service connectivity
+		setNeworkStatus(NETWORK_CONNECTED_SERVICES);
+
 		char mqttTopic[128];
 		snprintf(mqttTopic, sizeof(mqttTopic), "devices/%s/connected", MQTT_DEVICE_ID);
 		mqttClientNovaLogic.publish(mqttTopic, "true", 1, true);
@@ -394,7 +469,7 @@ void initNovaLogicServices()
 	{
 		DEBUG_PRINTLN("MQTT disconnected from NovaLogic broker!");
 		setServiceStatus(SERVICE_DISCONNECTED);
-		// Downgrade network status if we were at services level
+		// Downgrade network status to reflect lost services
 		if (statusNetwork == NETWORK_CONNECTED_SERVICES)
 		{
 			setNeworkStatus(NETWORK_CONNECTED_INTERNET);
@@ -620,13 +695,19 @@ void publishOTAStatus(const char *message)
 
 void keepAliveNovaLogic()
 {
-	// DEBUG_PRINTLN("Sending keep-alive message...");
-	if (!mqttClientNovaLogic.connected())
+	// Only send keep-alive if MQTT is connected
+	if (mqttClientNovaLogic.connected())
+	{
+		char mqttTopic[128];
+		snprintf(mqttTopic, sizeof(mqttTopic), "devices/%s/connected", MQTT_DEVICE_ID);
+		mqttClientNovaLogic.publish(mqttTopic, "true", 1, true);
+	}
+	else
+	{
+		// If not connected, try to reconnect
+		DEBUG_PRINTLN("MQTT not connected during keep-alive, attempting reconnection");
 		mqttClientNovaLogic.begin();
-
-	char mqttTopic[128];
-	snprintf(mqttTopic, sizeof(mqttTopic), "devices/%s/connected", MQTT_DEVICE_ID);
-	mqttClientNovaLogic.publish(mqttTopic, "true", 1, true);
+	}
 }
 
 void keepAliveRouterUDP()
@@ -651,82 +732,35 @@ void keepAliveRouterUDP()
 
 void checkInternetConnectivity()
 {
-	if (statusNetwork >= NETWORK_CONNECTED_IP)
+	// Only check if we have IP but no confirmed internet yet
+	if (statusNetwork != NETWORK_CONNECTED_IP)
 	{
-		if (testNetworkConnection("www.novalogic.io"))
-		{
-			// Internet is working
-			if (statusNetwork < NETWORK_CONNECTED_INTERNET)
-			{
-				setNeworkStatus(NETWORK_CONNECTED_INTERNET);
-				stableConnectionStartTime = millis(); // Reset stability timer
-				connectivityPingInterval = CHECK_INTERNET_INTERVAL_FAST; // Use fast polling initially
-				// Reset MQTT initialization flag so services will be reinitialized
-				hasInitializedMQTT = false;
-			}
-			else
-			{
-				// Check if connection has been stable long enough to switch to slow polling
-				if (millis() - stableConnectionStartTime > stableConnectionThreshold)
-				{
-					connectivityPingInterval = CHECK_INTERNET_INTERVAL_SLOW;
-				}
-			}
-		}
-		else
-		{
-			DEBUG_PRINTLN(F("Internet connectivity lost"));
-			if (statusNetwork >= NETWORK_CONNECTED_INTERNET)
-			{
-				// When we lose internet, we lose services too
-				setServiceStatus(SERVICE_DISCONNECTED);
-				setNeworkStatus(NETWORK_CONNECTED_IP);
-				connectivityPingInterval = CHECK_INTERNET_INTERVAL_FAST; // Use fast polling when having issues
-				stableConnectionStartTime = 0; // Reset stability timer
-				startPingChecker(); // Restart ping checking process
-			}
-		}
+		return;
 	}
-}
 
-void checkServiceConnectivity()
-{
-	// Check MQTT connection status and attempt reconnection if needed
-	if (statusNetwork >= NETWORK_CONNECTED_INTERNET)
+	// Don't check internet connectivity if ethernet is disconnected
+	if (Ethernet1.linkStatus() != LinkON)
 	{
-		if (!mqttClientNovaLogic.connected())
-		{
-			if (statusService != SERVICE_CONNECTING)
-			{
-				DEBUG_PRINTLN("MQTT disconnected, attempting reconnection...");
-				setServiceStatus(SERVICE_CONNECTING);
-				// Ensure network status reflects we don't have services
-				if (statusNetwork == NETWORK_CONNECTED_SERVICES)
-				{
-					setNeworkStatus(NETWORK_CONNECTED_INTERNET);
-				}
-				mqttClientNovaLogic.begin();
-			}
-		}
-		else
-		{
-			// MQTT is connected, ensure service status reflects this
-			if (statusService != SERVICE_CONNECTED)
-			{
-				setServiceStatus(SERVICE_CONNECTED);
-				setNeworkStatus(NETWORK_CONNECTED_SERVICES);
-			}
-		}
+		DEBUG_PRINTLN("Ethernet disconnected, skipping internet connectivity check");
+		return;
+	}
+
+	if (testNetworkConnection("www.novalogic.io"))
+	{
+		DEBUG_PRINTLN("Internet connectivity confirmed");
+		setNeworkStatus(NETWORK_CONNECTED_INTERNET);
+		stableConnectionStartTime = millis();					 // Reset stability timer
+		connectivityPingInterval = CHECK_INTERNET_INTERVAL_FAST; // Use fast polling initially
 	}
 	else
 	{
-		// No internet, ensure services are marked as disconnected
-		if (statusService != SERVICE_DISCONNECTED)
-		{
-			setServiceStatus(SERVICE_DISCONNECTED);
-		}
+		DEBUG_PRINTLN("Internet connectivity test failed");
+		// Stay at NETWORK_CONNECTED_IP status, keep trying
 	}
 }
+
+// Service connectivity is now managed directly in mqttServiceLoop()
+// This function is removed as part of the refactoring
 
 void setServiceStatus(ServiceStatus status)
 {
@@ -743,7 +777,7 @@ void setNeworkStatus(NetworkStatus status)
 	{
 		statusNetwork = status;
 		DEBUG_PRINTF("Network status changed to: %d\n", status);
-		
+
 		// Reset adaptive polling when network status changes
 		if (status >= NETWORK_CONNECTED_INTERNET)
 		{
@@ -758,15 +792,3 @@ void setNeworkStatus(NetworkStatus status)
 	}
 }
 
-void restartEthernetPort()
-{
-	if (statusNetwork >= NETWORK_CONNECTED_IP)
-	{
-		Ethernet1.end();
-		ethernetDriver1.end();
-		vTaskDelay(PORT_RECYCLE_INTERVAL / portTICK_PERIOD_MS);
-		ethernetDriver1.begin();
-		Ethernet1.init(ethernetDriver1);
-		Ethernet1.begin(5000);
-	}
-}

@@ -2,9 +2,10 @@
 
 extern LEDManager hwLEDs;
 extern StatusViewModel displayViewModel;
-DeviceStatus  _previousDeviceStatus = DEVICE_STARTED;
-NetworkStatus _previousNetworkStatus = NETWORK_STOPPED;
-ServiceStatus _previousServiceStatus = SERVICE_DISCONNECTED;
+// Initialize previous states to invalid values to force initial LED update
+DeviceStatus  _previousDeviceStatus = (DeviceStatus)-1;
+NetworkStatus _previousNetworkStatus = (NetworkStatus)-1;
+ServiceStatus _previousServiceStatus = (ServiceStatus)-1;
 
 void TaskLEDsUpdate(void *pvParameters)
 {

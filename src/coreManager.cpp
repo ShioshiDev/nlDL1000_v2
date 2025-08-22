@@ -34,6 +34,14 @@ DisplayMode displayMode = NORMAL;
 
 bool bIsRunningTestBlock = false;
 
+// Factory Reset Variables
+bool factoryResetComboPressed = false;
+unsigned long factoryResetStartTime = 0;
+const unsigned long FACTORY_RESET_HOLD_TIME = 5000; // 5 seconds
+uint8_t factoryResetSelection = 0; // 0 = Cancel, 1 = Confirm
+bool ignoreNextSRelease = false;
+bool ignoreNextMRelease = false;
+
 // Define Mutex handles
 SemaphoreHandle_t i2cMutex;
 SemaphoreHandle_t displayModelMutex;
@@ -89,11 +97,11 @@ void coreSetup()
 	initLEDs();
 
 	DEBUG_PRINTLN("... Initializing Ethernet Ports");
-	initEthernetPorts();
+	initEthernet();
 
 	DEBUG_PRINTLN(F("... Initializing Button Matrix"));
 	keypad.setDebounceTime(20);
-	keypad.addEventListener(keypadEvent);
+	// Using direct key scanning in updateKeyPad() instead of event listener
 
 	// Create Tasks
 	xTaskCreatePinnedToCore(TaskDisplayUpdate, "TaskDisplayUpdate", 8192, NULL, 7, NULL, 1);
@@ -108,14 +116,17 @@ void coreLoop()
 		showSerialMenu();
 
 	// Check for keypad events but handle them in the event handler
-	keypad.getKey();
+	updateKeyPad();
 
-	// Network connectivity and services are now handled entirely in TaskNetworkManager
-	// This reduces main loop complexity and provides better state management
+	// Check for factory reset combo
+	checkFactoryResetCombo();
 
 	// MQTT service loop is called here to handle message processing
-	// but connection management is handled in the network task
-	mqttServiceLoop();
+	// Skip during factory reset confirmation
+	if (displayMode != FACTORY_RESET_CONFIRM)
+	{
+		mqttServiceLoop();
+	}
 }
 
 // Hardware Initialization Functions ------------------------------------------------------
@@ -244,32 +255,148 @@ void initLEDs()
 	hwLEDs.setLEDColour(LED_SYSTEM, CRGB::Green);
 }
 
-// Keypad Event Handler -------------------------------------------------------------------
+// Keypad Event Handlers ------------------------------------------------------------------
 
-void keypadEvent(KeypadEvent key)
+void updateKeyPad()
 {
-	switch (keypad.getState())
+	// Use getKeys() to fill keypad.key[] array with all pressed keys
+	if (keypad.getKeys())
 	{
-	case PRESSED:
-		Serial.print(key);
-		Serial.println(F(" - Pressed"));
-		break;
-	case RELEASED:
-		Serial.print(key);
-		Serial.println(F(" - Released"));
-		onKeyRelease(key);
-		break;
-	case HOLD:
-		Serial.print(key);
-		Serial.println(F(" - Hold"));
-		break;
-	default:
-		break;
+		// Check for simultaneous S+M key press for factory reset
+		bool sPressed = false;
+		bool mPressed = false;
+		
+		for (int i = 0; i < LIST_MAX; i++)   // Scan the whole key list
+		{
+			if (keypad.key[i].stateChanged)   // Only find keys that have changed state
+			{
+				char currentKey = keypad.key[i].kchar;
+				
+				switch (keypad.key[i].kstate)  // Report active key state
+				{
+				case PRESSED:
+					Serial.print(currentKey);
+					Serial.println(F(" - Pressed"));
+					// Only call onKeyPress for non-factory-reset keys or when not in combo
+					if (!((currentKey == 'S' || currentKey == 'M') && factoryResetComboPressed))
+					{
+						onKeyPress(currentKey);
+					}
+					break;
+					
+				case RELEASED:
+					Serial.print(currentKey);
+					Serial.println(F(" - Released"));
+					// Always call onKeyRelease for UI handling
+					onKeyRelease(currentKey);
+					break;
+					
+				case HOLD:
+					Serial.print(currentKey);
+					Serial.println(F(" - Hold"));
+					break;
+					
+				default:
+					break;
+				}
+			}
+			
+			// Check if this key is currently pressed OR held (both count as "active")
+			if (keypad.key[i].kstate == PRESSED || keypad.key[i].kstate == HOLD)
+			{
+				if (keypad.key[i].kchar == 'S') sPressed = true;
+				if (keypad.key[i].kchar == 'M') mPressed = true;
+			}
+		}
+		
+		// Update simultaneous key press state
+		bool bothPressed = sPressed && mPressed;
+		
+		// Handle factory reset combo detection - but only if not already in confirmation mode
+		if (displayMode != FACTORY_RESET_CONFIRM)
+		{
+			if (bothPressed && !factoryResetComboPressed)
+			{
+				factoryResetComboPressed = true;
+				factoryResetStartTime = millis();
+				DEBUG_PRINTLN("Factory reset combo detected! Hold for 5 seconds...");
+				sprintf(displayViewModel.status, "Reset combo...");
+			}
+			else if (!bothPressed && factoryResetComboPressed)
+			{
+				factoryResetComboPressed = false;
+				DEBUG_PRINTLN("Factory reset combo cancelled");
+				sprintf(displayViewModel.status, "Started");
+			}
+		}
 	}
+}
+
+void onKeyPress(KeypadEvent key)
+{
+	// Factory reset combo detection is now handled in updateKeyPad()
+	// This function is kept for potential future single key handling
 }
 
 void onKeyRelease(KeypadEvent key)
 {
+	// Factory reset combo detection is now handled in updateKeyPad()
+	
+	// Handle Factory Reset confirmation mode
+	if (displayMode == FACTORY_RESET_CONFIRM)
+	{
+		// Check if we should ignore this key release (first release after entering confirmation mode)
+		if (key == 'S' && ignoreNextSRelease)
+		{
+			ignoreNextSRelease = false;
+			DEBUG_PRINTLN("Ignoring S release after factory reset confirmation start");
+			return;
+		}
+		if (key == 'M' && ignoreNextMRelease)
+		{
+			ignoreNextMRelease = false;
+			DEBUG_PRINTLN("Ignoring M release after factory reset confirmation start");
+			return;
+		}
+		
+		switch (key)
+		{
+		case 'L': // Left button - move to Cancel (0)
+		case 'U': // Up button - move to Cancel (0) 
+			factoryResetSelection = 0;
+			DEBUG_PRINTLN("Factory reset: Cancel selected");
+			break;
+		case 'R': // Right button - move to Confirm (1)
+		case 'D': // Down button - move to Confirm (1)
+			factoryResetSelection = 1;
+			DEBUG_PRINTLN("Factory reset: Confirm selected");
+			break;
+		case 'S': // Select button - execute selection
+			if (factoryResetSelection == 1)
+			{
+				// Confirm selected
+				DEBUG_PRINTLN("Factory reset confirmed!");
+				displayMode = NORMAL;
+				performFactoryReset();
+			}
+			else
+			{
+				// Cancel selected
+				DEBUG_PRINTLN("Factory reset cancelled");
+				displayMode = NORMAL;
+				sprintf(displayViewModel.status, "Started");
+			}
+			break;
+		case 'M': // Menu button - cancel
+			DEBUG_PRINTLN("Factory reset cancelled via menu");
+			displayMode = NORMAL;
+			sprintf(displayViewModel.status, "Started");
+			break;
+		}
+		return; // Don't process normal key handling during factory reset
+	}
+
+	// Normal key handling
 	switch (key)
 	{
 	case 'S':
@@ -465,4 +592,66 @@ void parseMQTTMessage(const char *topic, const char *payload)
 		sendFirmwareVersion();
 		return;
 	}
+}
+
+// Factory Reset Functions ----------------------------------------------------------------
+
+void checkFactoryResetCombo()
+{
+	if (factoryResetComboPressed)
+	{
+		unsigned long holdTime = millis() - factoryResetStartTime;
+		
+		if (holdTime >= FACTORY_RESET_HOLD_TIME)
+		{
+			// 5 seconds reached, show confirmation dialog
+			factoryResetComboPressed = false;
+			DEBUG_PRINTLN("Factory reset confirmation dialog starting...");
+			sprintf(displayViewModel.status, "Confirm reset?");
+			
+			// Switch to factory reset confirmation mode
+			displayMode = FACTORY_RESET_CONFIRM;
+			factoryResetSelection = 0; // Default to Cancel
+			
+			// Ignore the next release of S and M keys since user is still holding them
+			ignoreNextSRelease = true;
+			ignoreNextMRelease = true;
+		}
+	}
+}
+
+void performFactoryReset()
+{
+	DEBUG_PRINTLN("PERFORMING FACTORY RESET!");
+	sprintf(displayViewModel.status, "Factory Reset");
+	
+	// Find the factory application partition
+	const esp_partition_t* factory = esp_partition_find_first(
+		ESP_PARTITION_TYPE_APP,
+		ESP_PARTITION_SUBTYPE_APP_FACTORY,
+		"factory"
+	);
+
+	if (!factory) {
+		DEBUG_PRINTLN("Factory partition not found. Aborting factory reset.");
+		sprintf(displayViewModel.status, "Factory Error");
+		delay(3000);
+		sprintf(displayViewModel.status, "Started");
+		return;
+	}
+
+	// Set the factory partition as the boot partition
+	esp_err_t err = esp_ota_set_boot_partition(factory);
+	if (err != ESP_OK) {
+		DEBUG_PRINTF("esp_ota_set_boot_partition failed: 0x%X\n", err);
+		sprintf(displayViewModel.status, "Boot Error");
+		delay(3000);
+		sprintf(displayViewModel.status, "Started");
+		return;
+	}
+
+	DEBUG_PRINTLN("Factory reset complete. Restarting...");
+	sprintf(displayViewModel.status, "Restarting...");
+	delay(2000);
+	esp_restart();
 }
