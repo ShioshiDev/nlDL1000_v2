@@ -4,7 +4,9 @@
 
 #include <Arduino.h>
 #include <FastLED.h>
-#include <definitions.h>
+
+#include "definitions.h"
+#include "statusViewModel.h"
 
 void TaskLEDsUpdate(void *pvParameters);
 void updateLEDs();
@@ -30,9 +32,9 @@ private:
 	int pulseDirection = 1;
 
 public:
-    LEDManager();
-    void init();
-    void toggle();
+	LEDManager();
+	void init();
+	void toggle();
 	void on();
 	void off();
 	void update();

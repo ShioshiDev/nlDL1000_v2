@@ -11,14 +11,21 @@
 #include "LittleFS.h"
 #include "esp_partition.h"
 #include "esp_ota_ops.h"
+#include <memory>
 
 #include "definitions.h"
+#include "statusViewModel.h"
 #include "displayManager.h"
 #include "ledManager.h"
-#include "networkManager.h"
+#include "networkingManager.h"
+#include "connectivityManager.h"
+#include "servicesManager.h"
 
 void coreSetup();
 void coreLoop();
+
+// Task Functions
+void TaskManagersUpdate(void *pvParameters);
 
 String getMacAddress();
 String getSerialNumber();

@@ -8,10 +8,10 @@
 #include <U8g2lib.h>
 #include <ArtronShop_PCF85363.h>
 
-// #include "ledManager.h"
+#include "graphics.h"
 
 #include "definitions.h"
-#include "graphics.h"
+#include "statusViewModel.h"
 
 void TaskDisplayUpdate(void *pvParameters);
 void TaskRefreshDisplay(void *pvParameters);

@@ -1,6 +1,8 @@
 #include "coreManager.h"
 #include "mbedtls/md.h"
 
+static const char* TAG = "[CoreManager]";
+
 // Hardware Definitions -------------------------------------------------------------------
 
 U8G2_SH1106_128X64_NONAME_1_HW_I2C hwDisplay(U8G2_R0, BOARD_PIN_OLED_SCREEN_RESET);
@@ -22,15 +24,17 @@ const String DEVICE_ID = getSerialNumber();
 const String DEVICE_MAC = getMacAddress();
 const String DEVICE_SERIAL = getSerialNumber();
 
-BlockNot tmrKeepAlive = BlockNot(KEEP_ALIVE_INTERVAL);
 BlockNot tmrCheckConnectivity = BlockNot(CHECK_INTERNET_INTERVAL);
 
 DeviceStatus statusDevice = DEVICE_STARTED;
-NetworkStatus statusNetwork = NETWORK_STOPPED;
-ServiceStatus statusService = SERVICE_DISCONNECTED;
 
 StatusViewModel displayViewModel;
 DisplayMode displayMode = NORMAL;
+
+// Manager instances for three-tier architecture
+NetworkingManager networkingManager(displayViewModel);
+ConnectivityManager connectivityManager(networkingManager, displayViewModel);
+ServicesManager servicesManager(connectivityManager, displayViewModel);
 
 bool bIsRunningTestBlock = false;
 
@@ -38,7 +42,7 @@ bool bIsRunningTestBlock = false;
 bool factoryResetComboPressed = false;
 unsigned long factoryResetStartTime = 0;
 const unsigned long FACTORY_RESET_HOLD_TIME = 5000; // 5 seconds
-uint8_t factoryResetSelection = 0; // 0 = Cancel, 1 = Confirm
+uint8_t factoryResetSelection = 0;					// 0 = Cancel, 1 = Confirm
 bool ignoreNextSRelease = false;
 bool ignoreNextMRelease = false;
 
@@ -55,23 +59,19 @@ SemaphoreHandle_t statusServiceMutex;
 void coreSetup()
 {
 	// Initialize View Model
-	displayViewModel = {
-		.mac = DEVICE_MAC.c_str(),
-		.serial = DEVICE_SERIAL.c_str(),
-		.statusDevice = &statusDevice,
-		.statusNetwork = &statusNetwork,
-		.statusService = &statusService,
-		.status = "Initializing"};
+	displayViewModel.setMacAddress(DEVICE_MAC.c_str());
+	displayViewModel.setSerialNumber(DEVICE_SERIAL.c_str());
+	displayViewModel.setDeviceStatus(statusDevice);
+	displayViewModel.setStatusString("Initializing");
 
 	// Create Mutexes
 	i2cMutex = xSemaphoreCreateMutex();
 	displayModelMutex = xSemaphoreCreateMutex();
 	statusDeviceMutex = xSemaphoreCreateMutex();
-	statusNetworkMutex = xSemaphoreCreateMutex();
 	statusServiceMutex = xSemaphoreCreateMutex();
 
 	// Initialize hardware components
-	DEBUG_PRINTLN(F("... Initializing I2C Bus"));
+	DEBUG_PRINTF("%s ... Initializing I2C Bus\n", TAG);
 	Wire.begin(BOARD_PIN_I2C_SDA, BOARD_PIN_I2C_SCL);
 
 	// Quick reset of the display
@@ -90,23 +90,25 @@ void coreSetup()
 	digitalWrite(BOARD_PIN_ADS1256_CS, HIGH);
 	digitalWrite(BOARD_PIN_SD_CS, HIGH);
 
-	DEBUG_PRINTLN(F("... Initializing Display"));
+	DEBUG_PRINTF("%s ... Initializing Display\n", TAG);
 	initDisplay();
 
-	DEBUG_PRINTLN(F("... Initializing LEDs"));
+	DEBUG_PRINTF("%s ... Initializing LEDs\n", TAG);
 	initLEDs();
 
-	DEBUG_PRINTLN("... Initializing Ethernet Ports");
-	initEthernet();
+	DEBUG_PRINTF("%s ... Initializing State Machine Managers\n", TAG);
+	networkingManager.begin();
+	connectivityManager.begin();
+	servicesManager.begin();
 
-	DEBUG_PRINTLN(F("... Initializing Button Matrix"));
+	DEBUG_PRINTF("%s ... Initializing Button Matrix\n", TAG);
 	keypad.setDebounceTime(20);
 	// Using direct key scanning in updateKeyPad() instead of event listener
 
 	// Create Tasks
 	xTaskCreatePinnedToCore(TaskDisplayUpdate, "TaskDisplayUpdate", 8192, NULL, 7, NULL, 1);
 	xTaskCreatePinnedToCore(TaskLEDsUpdate, "TaskLEDsUpdate", 2048, NULL, 6, NULL, 1);
-	xTaskCreatePinnedToCore(TaskNetworkManager, "TaskNetworkManager", 8192, NULL, 8, NULL, 1);
+	xTaskCreatePinnedToCore(TaskManagersUpdate, "TaskManagersUpdate", 8192, NULL, 8, NULL, 1);
 }
 
 void coreLoop()
@@ -125,7 +127,24 @@ void coreLoop()
 	// Skip during factory reset confirmation
 	if (displayMode != FACTORY_RESET_CONFIRM)
 	{
-		mqttServiceLoop();
+		// TODO: Replace with new MQTT service loop
+		// mqttServiceLoop();
+	}
+}
+
+// Task Functions -----------------------------------------------------------------------
+
+void TaskManagersUpdate(void *pvParameters)
+{
+	for (;;)
+	{
+		// Run the state machine managers loop functions
+		networkingManager.loop();
+		connectivityManager.loop();
+		servicesManager.loop();
+
+		// Small delay to prevent task from hogging CPU
+		vTaskDelay(pdMS_TO_TICKS(50));
 	}
 }
 
@@ -138,7 +157,7 @@ String getMacAddress()
 	esp_err_t er = esp_efuse_mac_get_default(base_mac_addr);
 	if (er != ESP_OK)
 	{
-		DEBUG_PRINTLN("Failed to get MAC address");
+		DEBUG_PRINTF("%s Failed to get MAC address\n", TAG);
 		macAddress = "00:00:00:00:00:00"; // Default MAC address if retrieval fails
 		return macAddress;
 	}
@@ -165,7 +184,7 @@ String getSerialNumber()
 
 	if (macAddress == "00:00:00:00:00:00")
 	{
-		DEBUG_PRINTLN("Failed to get MAC address");
+		DEBUG_PRINTF("%s Failed to get MAC address\n", TAG);
 		return serialNumber;
 	}
 	else
@@ -231,14 +250,14 @@ void initDisplay()
 			hwDisplay.drawHLine(4, 22, 120);
 			hwDisplay.setFont(u8g2_font_5x7_tr);
 			hwDisplay.drawStr(4, 40, "Firmware Version: ");
-			strWidth = hwDisplay.getStrWidth(displayViewModel.version);
-			hwDisplay.drawStr((128 - strWidth - 4), 40, displayViewModel.version);
+			strWidth = hwDisplay.getStrWidth(displayViewModel.getVersion());
+			hwDisplay.drawStr((128 - strWidth - 4), 40, displayViewModel.getVersion());
 			hwDisplay.drawStr(4, 50, "MAC: ");
-			strWidth = hwDisplay.getStrWidth(displayViewModel.mac);
-			hwDisplay.drawStr((128 - strWidth - 4), 50, displayViewModel.mac);
+			strWidth = hwDisplay.getStrWidth(displayViewModel.getMacAddress());
+			hwDisplay.drawStr((128 - strWidth - 4), 50, displayViewModel.getMacAddress());
 			hwDisplay.drawStr(4, 60, "Serial Number: ");
-			strWidth = hwDisplay.getStrWidth(displayViewModel.serial);
-			hwDisplay.drawStr((128 - strWidth - 4), 60, displayViewModel.serial);
+			strWidth = hwDisplay.getStrWidth(displayViewModel.getSerialNumber());
+			hwDisplay.drawStr((128 - strWidth - 4), 60, displayViewModel.getSerialNumber());
 		} while (hwDisplay.nextPage());
 		xSemaphoreGive(i2cMutex);
 	}
@@ -265,14 +284,14 @@ void updateKeyPad()
 		// Check for simultaneous S+M key press for factory reset
 		bool sPressed = false;
 		bool mPressed = false;
-		
-		for (int i = 0; i < LIST_MAX; i++)   // Scan the whole key list
+
+		for (int i = 0; i < LIST_MAX; i++) // Scan the whole key list
 		{
-			if (keypad.key[i].stateChanged)   // Only find keys that have changed state
+			if (keypad.key[i].stateChanged) // Only find keys that have changed state
 			{
 				char currentKey = keypad.key[i].kchar;
-				
-				switch (keypad.key[i].kstate)  // Report active key state
+
+				switch (keypad.key[i].kstate) // Report active key state
 				{
 				case PRESSED:
 					Serial.print(currentKey);
@@ -283,35 +302,37 @@ void updateKeyPad()
 						onKeyPress(currentKey);
 					}
 					break;
-					
+
 				case RELEASED:
 					Serial.print(currentKey);
 					Serial.println(F(" - Released"));
 					// Always call onKeyRelease for UI handling
 					onKeyRelease(currentKey);
 					break;
-					
+
 				case HOLD:
 					Serial.print(currentKey);
 					Serial.println(F(" - Hold"));
 					break;
-					
+
 				default:
 					break;
 				}
 			}
-			
+
 			// Check if this key is currently pressed OR held (both count as "active")
 			if (keypad.key[i].kstate == PRESSED || keypad.key[i].kstate == HOLD)
 			{
-				if (keypad.key[i].kchar == 'S') sPressed = true;
-				if (keypad.key[i].kchar == 'M') mPressed = true;
+				if (keypad.key[i].kchar == 'S')
+					sPressed = true;
+				if (keypad.key[i].kchar == 'M')
+					mPressed = true;
 			}
 		}
-		
+
 		// Update simultaneous key press state
 		bool bothPressed = sPressed && mPressed;
-		
+
 		// Handle factory reset combo detection - but only if not already in confirmation mode
 		if (displayMode != FACTORY_RESET_CONFIRM)
 		{
@@ -320,13 +341,13 @@ void updateKeyPad()
 				factoryResetComboPressed = true;
 				factoryResetStartTime = millis();
 				DEBUG_PRINTLN("Factory reset combo detected! Hold for 5 seconds...");
-				sprintf(displayViewModel.status, "Reset combo...");
+				displayViewModel.setStatusString("Reset combo...");
 			}
 			else if (!bothPressed && factoryResetComboPressed)
 			{
 				factoryResetComboPressed = false;
 				DEBUG_PRINTLN("Factory reset combo cancelled");
-				sprintf(displayViewModel.status, "Started");
+				displayViewModel.setStatusString("Started");
 			}
 		}
 	}
@@ -341,7 +362,7 @@ void onKeyPress(KeypadEvent key)
 void onKeyRelease(KeypadEvent key)
 {
 	// Factory reset combo detection is now handled in updateKeyPad()
-	
+
 	// Handle Factory Reset confirmation mode
 	if (displayMode == FACTORY_RESET_CONFIRM)
 	{
@@ -358,11 +379,11 @@ void onKeyRelease(KeypadEvent key)
 			DEBUG_PRINTLN("Ignoring M release after factory reset confirmation start");
 			return;
 		}
-		
+
 		switch (key)
 		{
 		case 'L': // Left button - move to Cancel (0)
-		case 'U': // Up button - move to Cancel (0) 
+		case 'U': // Up button - move to Cancel (0)
 			factoryResetSelection = 0;
 			DEBUG_PRINTLN("Factory reset: Cancel selected");
 			break;
@@ -384,13 +405,13 @@ void onKeyRelease(KeypadEvent key)
 				// Cancel selected
 				DEBUG_PRINTLN("Factory reset cancelled");
 				displayMode = NORMAL;
-				sprintf(displayViewModel.status, "Started");
+				displayViewModel.setStatusString("Started");
 			}
 			break;
 		case 'M': // Menu button - cancel
 			DEBUG_PRINTLN("Factory reset cancelled via menu");
 			displayMode = NORMAL;
-			sprintf(displayViewModel.status, "Started");
+			displayViewModel.setStatusString("Started");
 			break;
 		}
 		return; // Don't process normal key handling during factory reset
@@ -415,7 +436,8 @@ void onKeyRelease(KeypadEvent key)
 		// Up button pressed
 		Serial.println(F("Up button pressed"));
 		// Print Ethernet Status
-		printEthernetStatus();
+		// TODO: Replace with new networking status display
+		// printEthernetStatus();
 		break;
 	case 'R':
 		// Right button pressed
@@ -504,7 +526,8 @@ void handleOption2()
 	Serial.println(F("Executing Option 2"));
 
 	// Print Ethernet Status
-	printEthernetStatus();
+	// TODO: Replace with new networking status display
+	// printEthernetStatus();
 }
 
 void handleOption3()
@@ -583,13 +606,15 @@ void parseMQTTMessage(const char *topic, const char *payload)
 	if (strcmp(payload, MQTT_SRV_CMD_DEVICE_MODEL) == 0)
 	{
 		DEBUG_PRINTLN("Device model requested...");
-		sendDeviceModel();
+		// TODO: Replace with new MQTT service calls
+		// sendDeviceModel();
 		return;
 	}
 	if (strcmp(payload, MQTT_SRV_CMD_FIRMWARE_VERSION) == 0)
 	{
 		DEBUG_PRINTLN("Device Firmware Version requested...");
-		sendFirmwareVersion();
+		// TODO: Replace with new MQTT service calls
+		// sendFirmwareVersion();
 		return;
 	}
 }
@@ -601,18 +626,18 @@ void checkFactoryResetCombo()
 	if (factoryResetComboPressed)
 	{
 		unsigned long holdTime = millis() - factoryResetStartTime;
-		
+
 		if (holdTime >= FACTORY_RESET_HOLD_TIME)
 		{
 			// 5 seconds reached, show confirmation dialog
 			factoryResetComboPressed = false;
 			DEBUG_PRINTLN("Factory reset confirmation dialog starting...");
-			sprintf(displayViewModel.status, "Confirm reset?");
-			
+			displayViewModel.setStatusString("Confirm reset?");
+
 			// Switch to factory reset confirmation mode
 			displayMode = FACTORY_RESET_CONFIRM;
 			factoryResetSelection = 0; // Default to Cancel
-			
+
 			// Ignore the next release of S and M keys since user is still holding them
 			ignoreNextSRelease = true;
 			ignoreNextMRelease = true;
@@ -623,35 +648,36 @@ void checkFactoryResetCombo()
 void performFactoryReset()
 {
 	DEBUG_PRINTLN("PERFORMING FACTORY RESET!");
-	sprintf(displayViewModel.status, "Factory Reset");
-	
+	displayViewModel.setStatusString("Factory Reset");
+
 	// Find the factory application partition
-	const esp_partition_t* factory = esp_partition_find_first(
+	const esp_partition_t *factory = esp_partition_find_first(
 		ESP_PARTITION_TYPE_APP,
 		ESP_PARTITION_SUBTYPE_APP_FACTORY,
-		"factory"
-	);
+		"factory");
 
-	if (!factory) {
+	if (!factory)
+	{
 		DEBUG_PRINTLN("Factory partition not found. Aborting factory reset.");
-		sprintf(displayViewModel.status, "Factory Error");
+		displayViewModel.setStatusString("Factory Error");
 		delay(3000);
-		sprintf(displayViewModel.status, "Started");
+		displayViewModel.setStatusString("Started");
 		return;
 	}
 
 	// Set the factory partition as the boot partition
 	esp_err_t err = esp_ota_set_boot_partition(factory);
-	if (err != ESP_OK) {
+	if (err != ESP_OK)
+	{
 		DEBUG_PRINTF("esp_ota_set_boot_partition failed: 0x%X\n", err);
-		sprintf(displayViewModel.status, "Boot Error");
+		displayViewModel.setStatusString("Boot Error");
 		delay(3000);
-		sprintf(displayViewModel.status, "Started");
+		displayViewModel.setStatusString("Started");
 		return;
 	}
 
 	DEBUG_PRINTLN("Factory reset complete. Restarting...");
-	sprintf(displayViewModel.status, "Restarting...");
+	displayViewModel.setStatusString("Restarting...");
 	delay(2000);
 	esp_restart();
 }

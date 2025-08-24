@@ -2,10 +2,6 @@
 
 extern LEDManager hwLEDs;
 extern StatusViewModel displayViewModel;
-// Initialize previous states to invalid values to force initial LED update
-DeviceStatus  _previousDeviceStatus = (DeviceStatus)-1;
-NetworkStatus _previousNetworkStatus = (NetworkStatus)-1;
-ServiceStatus _previousServiceStatus = (ServiceStatus)-1;
 
 void TaskLEDsUpdate(void *pvParameters)
 {
@@ -18,85 +14,98 @@ void TaskLEDsUpdate(void *pvParameters)
 
 void updateLEDs()
 {
-    // Compare the pointed-to values, not the pointers themselves
-    if (*displayViewModel.statusDevice != _previousDeviceStatus ||
-        *displayViewModel.statusNetwork != _previousNetworkStatus ||
-        *displayViewModel.statusService != _previousServiceStatus)
-    {
+	// Use the new dirty flag pattern for efficient updates
+	if (displayViewModel.isDirty())
+	{
+		DeviceStatus currentDeviceStatus = displayViewModel.getDeviceStatus();
+		NetworkStatus currentNetworkStatus = displayViewModel.getNetworkStatus();
+		ConnectivityStatus currentConnectivityStatus = displayViewModel.getConnectivityStatus();
+		ServicesStatus currentServiceStatus = displayViewModel.getServicesStatus();
 
-        switch (*displayViewModel.statusDevice)
-        {
-        case DEVICE_STARTED:
-            hwLEDs.setLEDColour(LED_SYSTEM, CRGB::Green);
-            break;
-        case DEVICE_UPDATING:
-            hwLEDs.setLEDColour(LED_SYSTEM, CRGB::Blue);
-            break;
-        case DEVICE_UPDATE_FAILED:
-            hwLEDs.setLEDColour(LED_SYSTEM, CRGB::Red);
-            break;
-        default:
-            hwLEDs.setLEDColour(LED_SYSTEM, CRGB::White);
-            break;
-        }
+		switch (currentDeviceStatus)
+		{
+		case DEVICE_STARTED:
+			hwLEDs.setLEDColour(LED_SYSTEM, CRGB::Green);
+			break;
+		case DEVICE_UPDATING:
+			hwLEDs.setLEDColour(LED_SYSTEM, CRGB::Blue);
+			break;
+		case DEVICE_UPDATE_FAILED:
+			hwLEDs.setLEDColour(LED_SYSTEM, CRGB::Red);
+			break;
+		default:
+			hwLEDs.setLEDColour(LED_SYSTEM, CRGB::White);
+			break;
+		}
 
-        // Network LED shows network connectivity
-        switch (*displayViewModel.statusNetwork)
-        {
-        case NETWORK_STOPPED:
-            hwLEDs.setLEDColour(LED_NETWORK, CRGB::Red);
-            break;
-        case NETWORK_STARTED:
-            hwLEDs.setLEDColour(LED_NETWORK, CRGB::White);
-            break;
-        case NETWORK_NOT_CONNECTED:
-            hwLEDs.setLEDColour(LED_NETWORK, CRGB::Red);
-            break;
-        case NETWORK_CONNECTED:
-            hwLEDs.setLEDColour(LED_NETWORK, CRGB::Orange);
-            break;
-        case NETWORK_CONNECTED_IP:
-            hwLEDs.setLEDColour(LED_NETWORK, CRGB::Blue);
-            break;
-        case NETWORK_CONNECTED_INTERNET:
-            hwLEDs.setLEDColour(LED_NETWORK, CRGB::Yellow);
-            break;
-        case NETWORK_CONNECTED_SERVICES:
-            // When services are connected, show service status on MID LED instead
-            if (*displayViewModel.statusService == SERVICE_CONNECTED)
-                hwLEDs.setLEDColour(LED_NETWORK, CRGB::Green);
-            else
-                hwLEDs.setLEDColour(LED_NETWORK, CRGB::Yellow); // Internet but no services
-            break;
-        default:
-            hwLEDs.setLEDColour(LED_NETWORK, CRGB::White);
-            break;
-        }
-        
-        // MID LED shows service connectivity
-        switch (*displayViewModel.statusService)
-        {
-        case SERVICE_DISCONNECTED:
-            hwLEDs.setLEDColour(LED_MID, CRGB::White);
-            break;
-        case SERVICE_CONNECTING:
-            hwLEDs.setLEDColour(LED_MID, CRGB::Orange);
-            break;
-        case SERVICE_CONNECTED:
-            hwLEDs.setLEDColour(LED_MID, CRGB::Green);
-            break;
-        case SERVICE_ERROR:
-            hwLEDs.setLEDColour(LED_MID, CRGB::Red);
-            break;
-        default:
-            hwLEDs.setLEDColour(LED_MID, CRGB::White);
-            break;
-        }
-    }
-        // Update the previous state with current values
-	_previousDeviceStatus = *displayViewModel.statusDevice;
-	_previousNetworkStatus = *displayViewModel.statusNetwork;
-	_previousServiceStatus = *displayViewModel.statusService;
+		// Network LED shows network connectivity
+		CRGB networkingStatusColor;
+
+		switch (currentNetworkStatus)
+		{
+		case NETWORK_STOPPED:
+			networkingStatusColor = CRGB::Grey;
+			break;
+		case NETWORK_STARTED:
+			networkingStatusColor = CRGB::White;
+			break;
+		case NETWORK_DISCONNECTED:
+			networkingStatusColor = CRGB::Orange;
+			break;
+		case NETWORK_CONNECTED:
+			networkingStatusColor = CRGB::Yellow;
+			break;
+		case NETWORK_CONNECTED_IP:
+			switch (currentConnectivityStatus)
+			{
+			case CONNECTIVITY_OFFLINE:
+				networkingStatusColor = CRGB::Violet;
+				break;
+			case CONNECTIVITY_CHECKING:
+				networkingStatusColor = CRGB::Cyan;
+				break;
+			case CONNECTIVITY_ONLINE:
+				switch (currentServiceStatus)
+				{
+				case SERVICES_STOPPED:
+					networkingStatusColor = CRGB::DarkBlue;
+					break;
+				case SERVICES_NOT_CONNECTED:
+					networkingStatusColor = CRGB::DarkBlue;
+					break;
+				case SERVICES_STARTING:
+					networkingStatusColor = CRGB::Blue;
+					break;
+				case SERVICES_CONNECTING:
+					networkingStatusColor = CRGB::Purple;
+					break;
+				case SERVICES_CONNECTED:
+					networkingStatusColor = CRGB::Green;
+					break;
+				case SERVICES_ERROR:
+					networkingStatusColor = CRGB::Red;
+					break;
+				default:
+					networkingStatusColor = CRGB::DarkBlue;
+					break;
+				}
+				break;
+			default:
+				networkingStatusColor = CRGB::Violet;
+				break;
+			}
+			break;
+		default:
+			networkingStatusColor = CRGB::Grey;
+			break;
+		}
+
+		// Set the network LED color based on connectivity status
+		hwLEDs.setLEDColour(LED_NETWORK, networkingStatusColor);
+
+		// Clear the dirty flag after processing updates
+		displayViewModel.clearDirty();
+	}
 }
 
 LEDManager::LEDManager()
