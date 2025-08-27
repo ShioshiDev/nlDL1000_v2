@@ -2,6 +2,7 @@
 #ifndef __STATUSVIEWMODEL_H__
 #define __STATUSVIEWMODEL_H__
 
+#include <cstring>
 #include "definitions.h"
 
 class StatusViewModel

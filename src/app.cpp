@@ -1,6 +1,7 @@
 #include <Arduino.h>
-#include "coreManager.h"
+#include "coreApplication.h"
 #include "definitions.h"
+#include "managers/loggingManager.h"
 
 void setup()
 {
@@ -8,13 +9,17 @@ void setup()
 	Serial.begin(115200);
 	delay(1000);
 
-	DEBUG_PRINTLN("Firmware version: " + String(FIRMWARE_VERSION));
-
-	DEBUG_PRINTLN("Booting Device Core...");
+	Serial.println("Firmware version: " + String(FIRMWARE_VERSION));
+	Serial.println("Booting Core Application...");
 
 	coreSetup();
 
-	DEBUG_PRINTLN("Booting Device Core Complete!");
+	// Now that logging is initialized, use the enhanced logger
+	if (globalLoggingManager) {
+		globalLoggingManager->logInfo("System", "Booting Core Application Complete!");
+	} else {
+		Serial.println("Booting Core Application Complete!");
+	}
 }
 
 void loop()

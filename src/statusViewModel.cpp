@@ -1,5 +1,4 @@
 #include "statusViewModel.h"
-#include <cstring>
 
 StatusViewModel::StatusViewModel()
     : version(FIRMWARE_VERSION), deviceStatus(DEVICE_STARTED), networkStatus(NETWORK_STOPPED), connectivityStatus(CONNECTIVITY_OFFLINE), servicesStatus(SERVICES_STOPPED), dirty(true) // Start as dirty to trigger initial updates

@@ -40,4 +40,4 @@ app (esp32 boot code and main application loop)
 - Follow best practices for modular design and code organization.
 - The project is a C++ application for an ESP32 Arduino project in PlatformIO. The code should be written with performance and efficiency in mind.
 - Use non-blocking code wherever possible to ensure smooth operation.
-- When using PlatformIO, use the build task to compile code so that the agent can obtain the output from the compilation process.
+- When using PlatformIO, use the build task to compile code so that the agent can obtain the output from the compilation process. !**Wait until the build process completes with  "*  Terminal will be reused by tasks, press any key to close it." before determining success or if there are any errors.**!

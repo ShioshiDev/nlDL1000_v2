@@ -2,27 +2,12 @@
 #ifndef __DEFINITIONS_H__
 #define __DEFINITIONS_H__
 
-#define FIRMWARE_VERSION "1.0.5" // Current Firmware Version in format X.YY.ZZ
+#define FIRMWARE_VERSION "1.0.6" // Current Firmware Version in format X.YY.ZZ
 
 // Device Name for Identification ---------------------------------------------------------
 #define DEVICE_NAME "DL1000"
 #define DEVICE_FRIENDLY_ID "NOVALOGIC DL1000"
 #define DEVICE_MODEL "DL1000v1"
-
-// Debugging Toggle for Serial Output -----------------------------------------------------
-#define DEBUG 1
-
-#ifdef DEBUG
-#define DEBUG_PRINT(x) Serial.print(x)
-#define DEBUG_PRINTLN(x) Serial.println(x)
-#define DEBUG_PRINTLN2(x, y) Serial.println(x, y)
-#define DEBUG_PRINTF(...) Serial.printf(__VA_ARGS__)
-#else
-#define DEBUG_PRINT(x)
-#define DEBUG_PRINTLN(x)
-#define DEBUG_PRINTLN2(x, y)
-#define DEBUG_PRINTF(...)
-#endif
 
 // Pin Definitions ------------------------------------------------------------------------
 #define BOARD_PIN_RGBLED_BOARD 8
@@ -70,35 +55,28 @@
 #define DISPLAY_UPDATE_INTERVAL 250        // 250 milliseconds
 #define LED_UPDATE_INTERVAL 100            // 100 milliseconds
 #define KEEP_ALIVE_INTERVAL 10000          // 10 seconds
-#define CHECK_INTERNET_INTERVAL 2500       // 2.5 seconds
-#define CHECK_INTERNET_INTERVAL_FAST 5000  // 5 seconds (when connection issues)
-#define CHECK_INTERNET_INTERVAL_SLOW 30000 // 30 seconds (when stable)
-#define CHECK_SERVICES_INTERVAL 10000      // 10 seconds
-#define TAGO_UPDATE_INTERVAL 60000         // 60 seconds
 #define MODBUS_ACTIVITY_INTERVAL 2500      // 2.5 seconds
 #define MODBUS_VALIDITY_INTERVAL 250       // 250 milliseconds
 
-// Connectivity Manager Constants ---------------------------------------------------------
-#define CONNECTIVITY_PING_TIMEOUT_MS 5000       // 5 seconds ping timeout
-#define CONNECTIVITY_PING_RETRY_COUNT 3         // Number of ping retries
-#define CONNECTIVITY_PING_INTERVAL_MS 30000     // 30 seconds between connectivity checks
-#define CONNECTIVITY_RETRY_INTERVAL_MS 10000    // 10 seconds retry interval on failure
-
 // Manager Configuration -------------------------------------------------------------------
-// NetworkingManager (Ethernet) Constants  
+// NetworkingManager (Ethernet) Constants
 #define NETWORKING_CONNECT_TIMEOUT_MS 30000 // How long to wait for IP after cable plugged (30 seconds)
 #define NETWORKING_RETRY_INTERVAL_MS 5000   // Wait before retrying ethernet connection (5 seconds)
 
-// NetworkManager (Internet Connectivity) Constants
-#define NETWORK_PING_INTERVAL_MS 10000       // How often to ping for internet check (ms)
-#define NETWORK_PING_TIMEOUT_MS 3000         // How long to wait for ping reply (ms)
-#define NETWORK_PING_RETRY_COUNT 3           // How many ping retries before marking offline
-#define NETWORK_PING_HOST "www.novalogic.io" // Default ping target
+// Connectivity Manager Constants ---------------------------------------------------------
+#define CONNECTIVITY_PING_TIMEOUT_MS 5000    // 5 seconds ping timeout
+#define CONNECTIVITY_PING_RETRY_COUNT 3      // Number of ping retries
+#define CONNECTIVITY_PING_INTERVAL_MS 30000  // 30 seconds between connectivity checks
+#define CONNECTIVITY_RETRY_INTERVAL_MS 10000 // 10 seconds retry interval on failure
+#define CONNECTIVITY_PING_HOST "www.novalogic.io" // Default ping target
 
 // ServicesManager (MQTT) Constants
 #define SERVICES_CONNECT_RETRY_INTERVAL_MS 15000 // Wait before retrying MQTT connect (ms)
 #define SERVICES_KEEPALIVE_INTERVAL_MS 10000     // MQTT keepalive interval (ms)
-#define SERVICES_CONNECTION_TIMEOUT_MS 10000     // MQTT connection timeout (ms)
+#define SERVICES_CONNECTION_TIMEOUT_MS 30000     // MQTT connection timeout (ms)
+
+// TagoIO Service Constants
+#define TAGOIO_UPDATE_INTERVAL 60000               // 60 seconds
 
 // RGB LED Definitions --------------------------------------------------------------------
 #define RGBLED_COUNT 3
@@ -108,14 +86,23 @@
 #define MQTT_SERVER_NL_URL "rabbitmq.vbitech.com"
 #define MQTT_SERVER_NL_PORT 1883
 
-#define MQTT_OTA_CMD_VERSION "REQUEST_FIRMWARE_VERSION"
-#define MQTT_OTA_CMD_UPDATE "REQUEST_FIRMWARE_UPDATE"
-#define MQTT_SRV_CMD_DEVICE_MODEL "REQUEST_DEVICE_MODEL"
-#define MQTT_SRV_CMD_FIRMWARE_VERSION "REQUEST_DEVICE_FIRMWARE_VERSION"
+#define MQTT_SERVER_TAGO_URL "mqtt.tago.io"
+#define MQTT_SERVER_TAGO_PORT 1883
+#define MQTT_SERVER_TAGO_TOPIC "readings"
+
+// MQTT Command Definitions ----------------------------------------------------------------
+// Client Commands
+#define MQTT_DVC_CMD_VERSION "REQUEST_FIRMWARE_VERSION"
+#define MQTT_DVC_CMD_UPDATE "REQUEST_FIRMWARE_UPDATE"
+
+// Server Commands
+#define MQTT_SVR_CMD_DEVICE_MODEL "REQUEST_DEVICE_MODEL"
+#define MQTT_SVR_CMD_FIRMWARE_VERSION "REQUEST_DEVICE_FIRMWARE_VERSION"
 
 // Misc Definitions -----------------------------------------------------------------------
 
 // Enum Definitions -----------------------------------------------------------------------
+
 enum DisplayMode
 {
     NORMAL = 1,
