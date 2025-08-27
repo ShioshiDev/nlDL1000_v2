@@ -1,5 +1,6 @@
 #include "loggingManager.h"
 #include "networkingManager.h"
+#include "esp_eth_driver.h"
 
 // Logging tag
 static const char* TAG = "NetworkingManager";
@@ -320,6 +321,33 @@ void NetworkingManager::printEthernetStatus()
         
         // Link status (basic check)
         LOG_INFO(TAG, "Link Status: %s", Ethernet1.linkStatus() == LinkON ? "UP" : "DOWN");
+        
+        // Get detailed link information using ESP Ethernet driver
+        esp_eth_handle_t eth_handle = Ethernet1.getEthHandle();
+        if (eth_handle != nullptr) {
+            // Get Auto-negotiation status
+            bool autonego = false;
+            if (esp_eth_ioctl(eth_handle, ETH_CMD_G_AUTONEGO, &autonego) == ESP_OK) {
+                LOG_INFO(TAG, "Auto-Negotiation: %s", autonego ? "Enabled" : "Disabled");
+            }
+            
+            // Get link speed
+            eth_speed_t speed;
+            if (esp_eth_ioctl(eth_handle, ETH_CMD_G_SPEED, &speed) == ESP_OK) {
+                const char* speed_str = (speed == ETH_SPEED_10M) ? "10 Mbps" : 
+                                       (speed == ETH_SPEED_100M) ? "100 Mbps" : "Unknown";
+                LOG_INFO(TAG, "Link Speed: %s", speed_str);
+            }
+            
+            // Get duplex mode
+            eth_duplex_t duplex;
+            if (esp_eth_ioctl(eth_handle, ETH_CMD_G_DUPLEX_MODE, &duplex) == ESP_OK) {
+                const char* duplex_str = (duplex == ETH_DUPLEX_FULL) ? "Full Duplex" : "Half Duplex";
+                LOG_INFO(TAG, "Link Duplex: %s", duplex_str);
+            }
+        } else {
+            LOG_WARN(TAG, "Unable to get Ethernet handle for detailed link info");
+        }
         
         // Additional network information
         LOG_INFO(TAG, "DHCP Enabled: %s", "Yes"); // EthernetESP32 uses DHCP by default
