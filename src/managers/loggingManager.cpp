@@ -99,6 +99,18 @@ void LoggingManager::onMQTTDisconnected() {
     }
 }
 
+void LoggingManager::updateSettings(bool logToFileEnabled, bool logToMQTTEnabled) {
+    this->logToFileEnabled = logToFileEnabled;
+    this->logToMQTTEnabled = logToMQTTEnabled;
+    
+    if (initialized) {
+        Serial.printf("[%lu][INFO][LoggingManager] Settings updated - File logging: %s, MQTT logging: %s\n", 
+                     millis(), 
+                     logToFileEnabled ? "enabled" : "disabled",
+                     logToMQTTEnabled ? "enabled" : "disabled");
+    }
+}
+
 void LoggingManager::debugPrintf(const char* format, ...) {
     if (!initialized) return;
     

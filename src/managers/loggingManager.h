@@ -31,12 +31,17 @@ public:
     // State queries
     bool isMQTTConnected() const { return mqttConnected; }
     
+    // Settings management
+    void updateSettings(bool logToFileEnabled, bool logToMQTTEnabled);
+    
     // Backward compatibility
     void debugPrintf(const char* format, ...);
     
 private:
     bool initialized = false;
     bool mqttConnected = false;  // Track MQTT connectivity state
+    bool logToFileEnabled = true;   // Settings for file logging
+    bool logToMQTTEnabled = true;   // Settings for MQTT logging
     NovaLogicService* mqttService = nullptr;
 };
 

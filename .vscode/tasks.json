@@ -12,6 +12,29 @@
 				"$platformio"
 			],
 			"group": "build"
+		},
+		{
+			"label": "Build and Flash Factory",
+			"type": "shell",
+			"command": "${workspaceFolder}\\buildandflashfactory.bat",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": false,
+				"clear": false
+			},
+			"problemMatcher": [
+				"$platformio"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			}
 		}
 	]
 }

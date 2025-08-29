@@ -24,4 +24,18 @@ void updateDisplayNormal();
 void updateDisplayMenu();
 void updateDisplayFactoryResetConfirm();
 
+// Menu system functions
+void handleMenuKeyPress(char key);
+void startMenuTimeout();
+void drawMainMenu();
+void drawDeviceInfoMenu();
+void drawEthernetInfoMenu();
+void drawSettingsMenu();
+void drawLoggingSettingsMenu();
+
+// Settings management
+void loadSettings();
+void saveSettings();
+AppSettings& getAppSettings();
+
 #endif // __DISPLAYMANAGER_H__

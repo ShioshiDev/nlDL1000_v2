@@ -34,6 +34,17 @@ public:
     
     // Status and diagnostics
     void printEthernetStatus();
+    
+    // Network information getters for display
+    String getLocalIP() const;
+    String getSubnetMask() const;
+    String getGatewayIP() const;
+    String getDNSServerIP() const;
+    String getMACAddress() const;
+    bool getLinkStatus() const;
+    String getLinkSpeed() const;
+    String getDuplexMode() const;
+    bool getAutoNegotiation() const;
 
 private:
     StatusViewModel &statusViewModel;

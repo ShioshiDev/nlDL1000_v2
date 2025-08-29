@@ -119,6 +119,9 @@ void coreSetup()
 	keypad.setDebounceTime(20);
 	// Using direct key scanning in updateKeyPad() instead of event listener
 
+	LOG_INFO(TAG, "Loading Application Settings");
+	loadSettings();
+
 	// Create Tasks
 	xTaskCreatePinnedToCore(TaskDisplayUpdate, "TaskDisplayUpdate", 8192, NULL, 7, NULL, 1);
 	xTaskCreatePinnedToCore(TaskLEDsUpdate, "TaskLEDsUpdate", 2048, NULL, 6, NULL, 1);
@@ -271,7 +274,7 @@ void initDisplay()
 	}
 	else
 	{
-		Serial.println("updateDateTime - Failed to take i2cMutex");
+		LOG_WARN(TAG, "updateDateTime - Failed to take i2cMutex");
 	}
 }
 
@@ -302,8 +305,7 @@ void updateKeyPad()
 				switch (keypad.key[i].kstate) // Report active key state
 				{
 				case PRESSED:
-					Serial.print(currentKey);
-					Serial.println(F(" - Pressed"));
+					LOG_DEBUG(TAG, "Key %c - Pressed", currentKey);
 					// Only call onKeyPress for non-factory-reset keys or when not in combo
 					if (!((currentKey == 'S' || currentKey == 'M') && factoryResetComboPressed))
 					{
@@ -312,15 +314,13 @@ void updateKeyPad()
 					break;
 
 				case RELEASED:
-					Serial.print(currentKey);
-					Serial.println(F(" - Released"));
+					LOG_DEBUG(TAG, "Key %c - Released", currentKey);
 					// Always call onKeyRelease for UI handling
 					onKeyRelease(currentKey);
 					break;
 
 				case HOLD:
-					Serial.print(currentKey);
-					Serial.println(F(" - Hold"));
+					LOG_DEBUG(TAG, "Key %c - Hold", currentKey);
 					break;
 
 				default:
@@ -430,27 +430,54 @@ void onKeyRelease(KeypadEvent key)
 	{
 	case 'S':
 		// Select button pressed
-		Serial.println(F("Select button pressed"));
+		LOG_DEBUG(TAG, "Select button pressed");
+		if (displayMode == MENU)
+		{
+			handleMenuKeyPress(key);
+		}
 		break;
 	case 'M':
 		// Menu button pressed
-		Serial.println(F("Menu button pressed"));
+		LOG_DEBUG(TAG, "Menu button pressed");
+		if (displayMode == NORMAL)
+		{
+			// Enter menu mode
+			displayMode = MENU;
+			startMenuTimeout();
+			LOG_DEBUG(TAG, "Entering menu mode");
+		}
+		else if (displayMode == MENU)
+		{
+			handleMenuKeyPress(key);
+		}
 		break;
 	case 'D':
 		// Down button pressed
-		Serial.println(F("Down button pressed"));
+		LOG_DEBUG(TAG, "Down button pressed");
+		if (displayMode == MENU)
+		{
+			handleMenuKeyPress(key);
+		}
 		break;
 	case 'U':
 		// Up button pressed
-		Serial.println(F("Up button pressed"));
+		LOG_DEBUG(TAG, "Up button pressed");
+		if (displayMode == MENU)
+		{
+			handleMenuKeyPress(key);
+		}
 		break;
 	case 'R':
 		// Right button pressed
-		Serial.println(F("Right button pressed"));
+		LOG_DEBUG(TAG, "Right button pressed");
+		if (displayMode == MENU)
+		{
+			handleMenuKeyPress(key);
+		}
 		break;
 	case 'L':
 		// Left button pressed
-		Serial.println(F("Left button pressed"));
+		LOG_DEBUG(TAG, "Left button pressed");
 		break;
 	default:
 		// Handle other keys if needed

@@ -370,3 +370,92 @@ void NetworkingManager::printEthernetStatus()
     LOG_INFO(TAG, "=== End Ethernet Status ===");
 }
 
+// Network information getters for display
+String NetworkingManager::getLocalIP() const
+{
+    if (hasIP())
+    {
+        return Ethernet1.localIP().toString();
+    }
+    return "Not Connected";
+}
+
+String NetworkingManager::getSubnetMask() const
+{
+    if (hasIP())
+    {
+        return Ethernet1.subnetMask().toString();
+    }
+    return "N/A";
+}
+
+String NetworkingManager::getGatewayIP() const
+{
+    if (hasIP())
+    {
+        return Ethernet1.gatewayIP().toString();
+    }
+    return "N/A";
+}
+
+String NetworkingManager::getDNSServerIP() const
+{
+    if (hasIP())
+    {
+        return Ethernet1.dnsServerIP().toString();
+    }
+    return "N/A";
+}
+
+String NetworkingManager::getMACAddress() const
+{
+    uint8_t mac[6];
+    Ethernet1.macAddress(mac);
+    char macStr[18];
+    snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X", 
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return String(macStr);
+}
+
+bool NetworkingManager::getLinkStatus() const
+{
+    return Ethernet1.linkStatus() == LinkON;
+}
+
+String NetworkingManager::getLinkSpeed() const
+{
+    esp_eth_handle_t eth_handle = Ethernet1.getEthHandle();
+    if (eth_handle != nullptr) {
+        eth_speed_t speed;
+        if (esp_eth_ioctl(eth_handle, ETH_CMD_G_SPEED, &speed) == ESP_OK) {
+            return (speed == ETH_SPEED_10M) ? "10 Mbps" : 
+                   (speed == ETH_SPEED_100M) ? "100 Mbps" : "Unknown";
+        }
+    }
+    return "N/A";
+}
+
+String NetworkingManager::getDuplexMode() const
+{
+    esp_eth_handle_t eth_handle = Ethernet1.getEthHandle();
+    if (eth_handle != nullptr) {
+        eth_duplex_t duplex;
+        if (esp_eth_ioctl(eth_handle, ETH_CMD_G_DUPLEX_MODE, &duplex) == ESP_OK) {
+            return (duplex == ETH_DUPLEX_FULL) ? "Full" : "Half";
+        }
+    }
+    return "N/A";
+}
+
+bool NetworkingManager::getAutoNegotiation() const
+{
+    esp_eth_handle_t eth_handle = Ethernet1.getEthHandle();
+    if (eth_handle != nullptr) {
+        bool autonego = false;
+        if (esp_eth_ioctl(eth_handle, ETH_CMD_G_AUTONEGO, &autonego) == ESP_OK) {
+            return autonego;
+        }
+    }
+    return false;
+}
+

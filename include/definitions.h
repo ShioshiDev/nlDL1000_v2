@@ -2,7 +2,7 @@
 #ifndef __DEFINITIONS_H__
 #define __DEFINITIONS_H__
 
-#define FIRMWARE_VERSION "1.0.6" // Current Firmware Version in format X.YY.ZZ
+#define FIRMWARE_VERSION "1.0.7" // Current Firmware Version in format X.YY.ZZ
 
 // Device Name for Identification ---------------------------------------------------------
 #define DEVICE_NAME "DL1000"
@@ -52,7 +52,7 @@
 #define LCD_VER_RES 64
 
 // Interval Definitions -------------------------------------------------------------------
-#define DISPLAY_UPDATE_INTERVAL 250        // 250 milliseconds
+#define DISPLAY_UPDATE_INTERVAL 200        // 200 milliseconds
 #define LED_UPDATE_INTERVAL 100            // 100 milliseconds
 #define KEEP_ALIVE_INTERVAL 10000          // 10 seconds
 #define MODBUS_ACTIVITY_INTERVAL 2500      // 2.5 seconds
@@ -151,6 +151,21 @@ enum ServicesStatus
     SERVICES_NOT_CONNECTED
 };
 
+enum MenuState
+{
+    MENU_MAIN,
+    MENU_DEVICE_INFO,
+    MENU_ETHERNET_INFO,
+    MENU_SETTINGS,
+    MENU_SETTINGS_LOGGING
+};
+
 // Structure Definitions ------------------------------------------------------------------
+
+struct AppSettings
+{
+    bool logToFile = true;
+    bool logToMQTT = true;
+};
 
 #endif // __DEFINITIONS_H__
