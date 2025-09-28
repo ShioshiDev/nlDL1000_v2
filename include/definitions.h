@@ -2,7 +2,7 @@
 #ifndef __DEFINITIONS_H__
 #define __DEFINITIONS_H__
 
-#define FIRMWARE_VERSION "1.0.2" // Current Firmware Version in format X.YY.ZZ
+#define FIRMWARE_VERSION "1.0.0" // Current Firmware Version in format X.YY.ZZ
 
 // Device Name for Identification ---------------------------------------------------------
 #define DEVICE_NAME "DL1000"
