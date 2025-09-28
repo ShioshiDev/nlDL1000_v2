@@ -2,7 +2,7 @@
 #ifndef __DEFINITIONS_H__
 #define __DEFINITIONS_H__
 
-#define FIRMWARE_VERSION "1.0.7" // Current Firmware Version in format X.YY.ZZ
+#define FIRMWARE_VERSION "1.0.2" // Current Firmware Version in format X.YY.ZZ
 
 // Device Name for Identification ---------------------------------------------------------
 #define DEVICE_NAME "DL1000"
@@ -50,6 +50,12 @@
 // Display Attributes ---------------------------------------------------------------------
 #define LCD_HOR_RES 128
 #define LCD_VER_RES 64
+
+// Display Power Management ---------------------------------------------------------------
+#define DISPLAY_DIM_TIMEOUT_MS 30000      // 30 seconds before dimming
+#define DISPLAY_OFF_TIMEOUT_MS 60000      // 60 seconds before turning off
+#define DISPLAY_NORMAL_CONTRAST 255       // Normal brightness (0-255)
+#define DISPLAY_DIM_CONTRAST 127          // Dimmed brightness (0-255)
 
 // Interval Definitions -------------------------------------------------------------------
 #define DISPLAY_UPDATE_INTERVAL 200        // 200 milliseconds
@@ -151,6 +157,14 @@ enum ServicesStatus
     SERVICES_NOT_CONNECTED
 };
 
+enum ModbusMonitorStatus
+{
+    MODBUS_INACTIVE,    // No traffic detected
+    MODBUS_ACTIVE,      // Traffic detected
+    MODBUS_VALID,       // Valid message detected
+    MODBUS_INVALID      // Invalid/bad messages detected
+};
+
 enum MenuState
 {
     MENU_MAIN,
@@ -166,6 +180,13 @@ struct AppSettings
 {
     bool logToFile = true;
     bool logToMQTT = true;
+    
+    // ModBus configuration
+    uint32_t modbusBaudRate = 9600;
+    uint8_t modbusSlaveId = 0x0A;
+    bool modbusOutputToSerial = false;
+    bool modbusOutputToFile = false;
+    bool modbusOutputToMQTT = false;
 };
 
 #endif // __DEFINITIONS_H__

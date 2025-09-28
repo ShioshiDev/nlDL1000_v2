@@ -47,7 +47,6 @@ bool ignoreNextMRelease = false;
 // Define Mutex handles
 SemaphoreHandle_t i2cMutex;
 SemaphoreHandle_t displayModelMutex;
-
 SemaphoreHandle_t statusDeviceMutex;
 SemaphoreHandle_t statusNetworkMutex;
 SemaphoreHandle_t statusServiceMutex;
@@ -369,7 +368,14 @@ void onKeyPress(KeypadEvent key)
 
 void onKeyRelease(KeypadEvent key)
 {
-	// Factory reset combo detection is now handled in updateKeyPad()
+	// Reset display power management timers on any key release and check if display was woken
+	bool displayWasWoken = updateDisplayActivity();
+	
+	// If display was woken from sleep/dim, consume this keypress (don't process it)
+	if (displayWasWoken) {
+		LOG_DEBUG(TAG, "Key %c consumed to wake display", key);
+		return;
+	}
 
 	// Handle Factory Reset confirmation mode
 	if (displayMode == FACTORY_RESET_CONFIRM)
@@ -441,8 +447,8 @@ void onKeyRelease(KeypadEvent key)
 		LOG_DEBUG(TAG, "Menu button pressed");
 		if (displayMode == NORMAL)
 		{
-			// Enter menu mode
-			displayMode = MENU;
+			// Enter menu mode using new menu system
+			showMenuSystem();
 			startMenuTimeout();
 			LOG_DEBUG(TAG, "Entering menu mode");
 		}
@@ -492,10 +498,10 @@ void showSerialMenu()
 	Serial.println(F("Serial Menu:"));
 	Serial.println(F("1. Run Test Code Block"));
 	Serial.println(F("2. Print Ethernet Status"));
-	Serial.println(F("3. "));
-	Serial.println(F("4. "));
-	Serial.println(F("5. "));
-	Serial.println(F("6. "));
+	Serial.println(F("3. ModBus Monitor Status"));
+	Serial.println(F("4. Set ModBus Baud Rate"));
+	Serial.println(F("5. Set ModBus Slave ID"));
+	Serial.println(F("6. Toggle ModBus Debug Output"));
 	Serial.println(F("7. "));
 	Serial.println(F("8. "));
 	Serial.println(F("9. "));
@@ -563,21 +569,25 @@ void handleOption2()
 void handleOption3()
 {
 	Serial.println(F("Executing Option 3"));
+	Serial.println(F("ModBus monitoring has been removed from this firmware."));
 }
 
 void handleOption4()
 {
 	Serial.println(F("Executing Option 4"));
+	Serial.println(F("ModBus baud rate setting has been removed from this firmware."));
 }
 
 void handleOption5()
 {
 	Serial.println(F("Executing Option 5"));
+	Serial.println(F("ModBus slave ID setting has been removed from this firmware."));
 }
 
 void handleOption6()
 {
 	Serial.println(F("Executing Option 6"));
+	Serial.println(F("ModBus debug output setting has been removed from this firmware."));
 }
 
 void handleOption7()

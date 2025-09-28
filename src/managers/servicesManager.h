@@ -9,7 +9,9 @@
 #include "connectivityManager.h"
 #include "services/baseService.h"
 #include "services/novaLogicService.h"
+#ifdef TEST_ALL_SERVICES
 #include "services/tagoIOService.h"
+#endif
 
 // Forward declarations
 class StatusViewModel;
@@ -29,11 +31,15 @@ public:
     ServicesStatus getState() const;
     bool isConnected() const;
     bool isNovaLogicConnected() const;
+#ifdef TEST_ALL_SERVICES
     bool isTagoIOConnected() const;
+#endif
 
     // Service access for external calls
     NovaLogicService& getNovaLogicService() { return novaLogicService; }
+#ifdef TEST_ALL_SERVICES
     TagoIOService& getTagoIOService() { return tagoIOService; }
+#endif
 
     // Device management functions (delegated to NovaLogic service)
     void sendDeviceModel();
@@ -41,9 +47,11 @@ public:
     void sendConnectionStatus(bool connected);
     void checkOTAVersion();
 
+#ifdef TEST_ALL_SERVICES
     // Data publishing functions (delegated to TagoIO service)
     void publishSensorData(const char* variable, float value, const char* unit = nullptr);
     void publishDeviceStatus(const char* status);
+#endif
 
     // Set callback for state change event
     void setStateChangeCallback(std::function<void(ServicesStatus)> callback);
@@ -64,7 +72,9 @@ private:
     
     // Services
     NovaLogicService novaLogicService;
+#ifdef TEST_ALL_SERVICES
     TagoIOService tagoIOService;
+#endif
     
     // State management
     ServicesStatus currentState;

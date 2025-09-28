@@ -13,6 +13,7 @@
 #include "graphics.h"
 #include "definitions.h"
 #include "statusViewModel.h"
+#include "menuManager.h"
 
 void TaskDisplayUpdate(void *pvParameters);
 void TaskRefreshDisplay(void *pvParameters);
@@ -32,6 +33,23 @@ void drawDeviceInfoMenu();
 void drawEthernetInfoMenu();
 void drawSettingsMenu();
 void drawLoggingSettingsMenu();
+
+// New menu system functions
+void initializeMenuSystem();
+void createMainMenu();
+void createDeviceInfoMenu();
+void createEthernetInfoMenu();
+void createSettingsMenu();
+void createLoggingSettingsMenu();
+void showMenuSystem();
+void handleMenuKeyPressNew(char key);
+void cleanupMenuSystem();
+
+// Display power management
+bool updateDisplayActivity();
+void checkDisplayPowerManagement();
+void setDisplayBrightness(uint8_t contrast);
+bool wakeDisplay();
 
 // Settings management
 void loadSettings();

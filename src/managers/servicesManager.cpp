@@ -6,7 +6,10 @@ static const char* TAG = "ServicesManager";
 
 ServicesManager::ServicesManager(ConnectivityManager &connectivityMgr, StatusViewModel &statusVM)
     : connectivityManager(connectivityMgr), statusViewModel(statusVM), 
-      novaLogicService(statusVM), tagoIOService(),
+      novaLogicService(statusVM),
+#ifdef TEST_ALL_SERVICES
+      tagoIOService(),
+#endif
       currentState(SERVICES_STOPPED), initialized(false), lastMQTTConnectedState(false), stateChangeCallback(nullptr),
       lastStateCheck(0)
 {
@@ -15,9 +18,11 @@ ServicesManager::ServicesManager(ConnectivityManager &connectivityMgr, StatusVie
         this->onServiceStatusChange(status);
     });
     
+#ifdef TEST_ALL_SERVICES
     tagoIOService.setStatusChangeCallback([this](ServiceStatus status) {
         this->onServiceStatusChange(status);
     });
+#endif
 }
 
 ServicesManager::~ServicesManager()
@@ -31,7 +36,9 @@ void ServicesManager::begin()
 
     // Initialize individual services
     novaLogicService.begin();
+#ifdef TEST_ALL_SERVICES
     tagoIOService.begin();
+#endif
 
     // Start in STOPPED state - will transition to STARTING only when connectivity is available
     setState(SERVICES_STOPPED);
@@ -49,7 +56,9 @@ void ServicesManager::loop()
 
     // Update individual services
     novaLogicService.loop();
+#ifdef TEST_ALL_SERVICES
     tagoIOService.loop();
+#endif
 
     // Periodic status evaluation
     unsigned long now = millis();
@@ -69,15 +78,17 @@ void ServicesManager::loop()
             LOG_INFO(TAG, "Internet connectivity available, starting services");
             setState(SERVICES_STARTING);
             
-            // Start both services
+            // Start services
             if (novaLogicService.getStatus() == SERVICE_STOPPED)
             {
                 novaLogicService.start();
             }
+#ifdef TEST_ALL_SERVICES
             if (tagoIOService.getStatus() == SERVICE_STOPPED)
             {
                 tagoIOService.start();
             }
+#endif
         }
         break;
 
@@ -87,7 +98,9 @@ void ServicesManager::loop()
             // Lost connectivity while starting, stop services
             LOG_WARN(TAG, "Lost connectivity while starting, stopping services");
             novaLogicService.stop();
+#ifdef TEST_ALL_SERVICES
             tagoIOService.stop();
+#endif
             setState(SERVICES_STOPPED);
         }
         // updateOverallStatus() will handle transition to CONNECTING/CONNECTED
@@ -99,7 +112,9 @@ void ServicesManager::loop()
             // Lost connectivity while connecting
             LOG_WARN(TAG, "Lost connectivity while connecting, stopping services");
             novaLogicService.stop();
+#ifdef TEST_ALL_SERVICES
             tagoIOService.stop();
+#endif
             setState(SERVICES_STOPPED);
         }
         // updateOverallStatus() will handle transition to CONNECTED or ERROR
@@ -110,7 +125,9 @@ void ServicesManager::loop()
         {
             LOG_WARN(TAG, "Internet connectivity lost, stopping services");
             novaLogicService.stop();
+#ifdef TEST_ALL_SERVICES
             tagoIOService.stop();
+#endif
             setState(SERVICES_NOT_CONNECTED);
         }
         break;
@@ -123,7 +140,9 @@ void ServicesManager::loop()
             if (currentState != SERVICES_STOPPED)
             {
                 novaLogicService.stop();
+#ifdef TEST_ALL_SERVICES
                 tagoIOService.stop();
+#endif
                 setState(SERVICES_STOPPED);
             }
         }
@@ -139,11 +158,13 @@ void ServicesManager::loop()
             {
                 novaLogicService.start();
             }
+#ifdef TEST_ALL_SERVICES
             if (tagoIOService.getStatus() == SERVICE_STOPPED || 
                 tagoIOService.getStatus() == SERVICE_ERROR)
             {
                 tagoIOService.start();
             }
+#endif
         }
         break;
     }
@@ -155,7 +176,9 @@ void ServicesManager::stop()
 
     // Stop individual services
     novaLogicService.stop();
+#ifdef TEST_ALL_SERVICES
     tagoIOService.stop();
+#endif
 
     setState(SERVICES_STOPPED);
     initialized = false;
@@ -178,10 +201,12 @@ bool ServicesManager::isNovaLogicConnected() const
     return novaLogicService.isConnected();
 }
 
+#ifdef TEST_ALL_SERVICES
 bool ServicesManager::isTagoIOConnected() const
 {
     return tagoIOService.isConnected();
 }
+#endif
 
 void ServicesManager::setState(ServicesStatus newState)
 {
@@ -228,23 +253,26 @@ void ServicesManager::setState(ServicesStatus newState)
 void ServicesManager::updateOverallStatus()
 {
     ServiceStatus novaLogicStatus = novaLogicService.getStatus();
-    ServiceStatus tagoStatus = tagoIOService.getStatus();
+#ifdef TEST_ALL_SERVICES
+    ServiceStatus tagoIOStatus = tagoIOService.getStatus();
+#endif
 
     // Determine overall status based on individual service states
     ServicesStatus newOverallStatus = currentState;
 
+#ifdef TEST_ALL_SERVICES
     // Both services connected = CONNECTED
-    if (novaLogicStatus == SERVICE_CONNECTED && tagoStatus == SERVICE_CONNECTED)
+    if (novaLogicStatus == SERVICE_CONNECTED && tagoIOStatus == SERVICE_CONNECTED)
     {
         newOverallStatus = SERVICES_CONNECTED;
     }
     // Any service connecting = CONNECTING
-    else if (novaLogicStatus == SERVICE_CONNECTING || tagoStatus == SERVICE_CONNECTING)
+    else if (novaLogicStatus == SERVICE_CONNECTING || tagoIOStatus == SERVICE_CONNECTING)
     {
         newOverallStatus = SERVICES_CONNECTING;
     }
     // Any service starting = STARTING
-    else if (novaLogicStatus == SERVICE_STARTING || tagoStatus == SERVICE_STARTING)
+    else if (novaLogicStatus == SERVICE_STARTING || tagoIOStatus == SERVICE_STARTING)
     {
         if (currentState == SERVICES_STOPPED)
         {
@@ -252,26 +280,60 @@ void ServicesManager::updateOverallStatus()
         }
     }
     // Any service error = ERROR
-    else if (novaLogicStatus == SERVICE_ERROR || tagoStatus == SERVICE_ERROR)
+    else if (novaLogicStatus == SERVICE_ERROR || tagoIOStatus == SERVICE_ERROR)
     {
         newOverallStatus = SERVICES_ERROR;
     }
     // Any service not connected = NOT_CONNECTED (unless we're in a starting state)
-    else if ((novaLogicStatus == SERVICE_NOT_CONNECTED || tagoStatus == SERVICE_NOT_CONNECTED) &&
+    else if ((novaLogicStatus == SERVICE_NOT_CONNECTED || tagoIOStatus == SERVICE_NOT_CONNECTED) &&
              currentState != SERVICES_STARTING)
     {
         newOverallStatus = SERVICES_NOT_CONNECTED;
+#else
+    // Only NovaLogic service when TEST_ALL_SERVICES is not defined
+    if (novaLogicStatus == SERVICE_CONNECTED)
+    {
+        newOverallStatus = SERVICES_CONNECTED;
+    }
+    else if (novaLogicStatus == SERVICE_CONNECTING)
+    {
+        newOverallStatus = SERVICES_CONNECTING;
+    }
+    else if (novaLogicStatus == SERVICE_STARTING)
+    {
+        if (currentState == SERVICES_STOPPED)
+        {
+            newOverallStatus = SERVICES_STARTING;
+        }
+    }
+    else if (novaLogicStatus == SERVICE_ERROR)
+    {
+        newOverallStatus = SERVICES_ERROR;
+    }
+    else if (novaLogicStatus == SERVICE_NOT_CONNECTED && currentState != SERVICES_STARTING)
+    {
+        newOverallStatus = SERVICES_NOT_CONNECTED;
+#endif
     }
     // Both services stopped = STOPPED
-    else if (novaLogicStatus == SERVICE_STOPPED && tagoStatus == SERVICE_STOPPED)
+#ifdef TEST_ALL_SERVICES
+    else if (novaLogicStatus == SERVICE_STOPPED && tagoIOStatus == SERVICE_STOPPED)
+#else
+    else if (novaLogicStatus == SERVICE_STOPPED)
+#endif
     {
         newOverallStatus = SERVICES_STOPPED;
     }
 
     if (newOverallStatus != currentState)
     {
+#ifdef TEST_ALL_SERVICES
         LOG_DEBUG(TAG, "Overall status update: NovaLogic=%d, TagoIO=%d -> Overall=%d", 
-                    novaLogicStatus, tagoStatus, newOverallStatus);
+                    novaLogicStatus, tagoIOStatus, newOverallStatus);
+#else
+        LOG_DEBUG(TAG, "Overall status update: NovaLogic=%d -> Overall=%d", 
+                    novaLogicStatus, newOverallStatus);
+#endif
         setState(newOverallStatus);
     }
 }
@@ -329,6 +391,7 @@ void ServicesManager::checkOTAVersion()
     novaLogicService.checkOTAVersion();
 }
 
+#ifdef TEST_ALL_SERVICES
 // Delegated functions to TagoIO service
 void ServicesManager::publishSensorData(const char* variable, float value, const char* unit)
 {
@@ -339,6 +402,7 @@ void ServicesManager::publishDeviceStatus(const char* status)
 {
     tagoIOService.publishDeviceStatus(status);
 }
+#endif
 
 void ServicesManager::setStateChangeCallback(std::function<void(ServicesStatus)> callback)
 {
@@ -371,10 +435,12 @@ void ServicesManager::onConnectivityChanged(ConnectivityStatus connectivityStatu
             {
                 novaLogicService.start();
             }
+#ifdef TEST_ALL_SERVICES
             if (tagoIOService.getStatus() == SERVICE_STOPPED)
             {
                 tagoIOService.start();
             }
+#endif
         }
         break;
 
@@ -385,7 +451,9 @@ void ServicesManager::onConnectivityChanged(ConnectivityStatus connectivityStatu
         {
             LOG_WARN(TAG, "Internet connectivity lost immediately, stopping services");
             novaLogicService.stop();
+#ifdef TEST_ALL_SERVICES
             tagoIOService.stop();
+#endif
             setState(SERVICES_STOPPED);
         }
         break;
@@ -397,7 +465,9 @@ void ServicesManager::onConnectivityChanged(ConnectivityStatus connectivityStatu
             if (currentState != SERVICES_STOPPED)
             {
                 novaLogicService.stop();
+#ifdef TEST_ALL_SERVICES
                 tagoIOService.stop();
+#endif
                 setState(SERVICES_STOPPED);
             }
         }
@@ -411,11 +481,13 @@ void ServicesManager::onConnectivityChanged(ConnectivityStatus connectivityStatu
             {
                 novaLogicService.start();
             }
+#ifdef TEST_ALL_SERVICES
             if (tagoIOService.getStatus() == SERVICE_STOPPED || 
                 tagoIOService.getStatus() == SERVICE_ERROR)
             {
                 tagoIOService.start();
             }
+#endif
         }
         break;
     }

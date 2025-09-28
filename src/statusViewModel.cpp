@@ -52,6 +52,8 @@ ServicesStatus StatusViewModel::getServicesStatus() const
     return servicesStatus;
 }
 
+
+
 const char *StatusViewModel::getStatusString() const
 {
     return statusString;
@@ -117,6 +119,8 @@ void StatusViewModel::setServicesStatus(ServicesStatus status)
         updateStatusString();
     }
 }
+
+
 
 void StatusViewModel::setStatusString(const char *status)
 {

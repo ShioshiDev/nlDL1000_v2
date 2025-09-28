@@ -3,7 +3,7 @@ echo Flashing only factory partition with latest firmware.bin...
 
 set COM_PORT=COM13
 set BAUD_RATE=921600
-set BUILD_DIR=.pio\build\esp32-s3-devkitc-1
+set BUILD_DIR=.pio\build\WithPartitions
 
 rem Check if COM port was provided as an argument
 if not "%~1"=="" set COM_PORT=%~1
