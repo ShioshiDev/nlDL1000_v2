@@ -28,6 +28,10 @@ public:
     void setConnectivityStatus(ConnectivityStatus status);
     void setServicesStatus(ServicesStatus status);
     void setStatusString(const char *status);
+    
+    // OTA management
+    void setOTAActive(bool active);
+    bool isOTAActive() const;
 
     // Dirty flag management
     bool isDirty() const;
@@ -48,6 +52,9 @@ private:
     ConnectivityStatus connectivityStatus;
     ServicesStatus servicesStatus;
     char statusString[16]; // Aggregated status string
+
+    // OTA status
+    bool otaActive;
 
     // Dirty flag
     mutable bool dirty;

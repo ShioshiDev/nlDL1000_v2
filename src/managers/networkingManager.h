@@ -10,9 +10,9 @@
 #include "definitions.h"
 #include "statusViewModel.h"
 
-// Forward declarations
-extern W5500Driver ethernetDriver1;
-extern EthernetClass Ethernet1;
+// // Forward declarations
+// extern W5500Driver ethernetDriver1;
+// extern EthernetClass Ethernet1;
 
 class NetworkingManager
 {

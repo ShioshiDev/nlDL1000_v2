@@ -1,4 +1,6 @@
 #include "novaLogicService.h"
+#include "definitions.h"
+#include <esp_task_wdt.h>
 
 // Logging tag
 static const char* TAG = "NovaLogicService";
@@ -397,11 +399,13 @@ void NovaLogicService::handleOTAUpdate(PicoMQTT::IncomingPacket& packets)
 
     // Update status to indicate device is updating
     statusViewModel.setDeviceStatus(DEVICE_UPDATING);
+    statusViewModel.setOTAActive(true); // Signal other tasks to reduce activity
 
     if (!Update.begin(packets.available()))
     {
         publishOTAStatus("Error: Not enough space for update");
         statusViewModel.setDeviceStatus(DEVICE_UPDATE_FAILED);
+        statusViewModel.setOTAActive(false); // Clear OTA flag
         LOG_ERROR(TAG, "OTA Update failed: Not enough space");
         delay(2500);
         statusViewModel.setDeviceStatus(DEVICE_STARTED);
@@ -409,24 +413,89 @@ void NovaLogicService::handleOTAUpdate(PicoMQTT::IncomingPacket& packets)
     }
 
     publishOTAStatus("Beginning OTA update, this may take a minute...");
-    size_t written = Update.write(packets);
-    if (written == payload_size)
+    
+    // Write in chunks to avoid blocking for too long
+    const size_t CHUNK_SIZE = OTA_CHUNK_SIZE;
+    size_t totalWritten = 0;
+    size_t remaining = payload_size;
+    
+    while (remaining > 0 && packets.available())
     {
-        LOG_INFO(TAG, "Written: %zu successfully", written);
+        size_t toWrite = (remaining > CHUNK_SIZE) ? CHUNK_SIZE : remaining;
+        
+        // Create a temporary buffer for the chunk
+        uint8_t* buffer = new uint8_t[toWrite];
+        if (!buffer)
+        {
+            LOG_ERROR(TAG, "Failed to allocate memory for OTA chunk");
+            publishOTAStatus("Error: Memory allocation failed");
+            statusViewModel.setDeviceStatus(DEVICE_UPDATE_FAILED);
+            statusViewModel.setOTAActive(false); // Clear OTA flag
+            delay(2500);
+            statusViewModel.setDeviceStatus(DEVICE_STARTED);
+            return;
+        }
+        
+        // Read chunk from packets
+        size_t bytesRead = packets.read(buffer, toWrite);
+        if (bytesRead == 0)
+        {
+            LOG_ERROR(TAG, "No more data available from packets");
+            delete[] buffer;
+            break;
+        }
+        
+        // Write chunk to update
+        size_t bytesWritten = Update.write(buffer, bytesRead);
+        delete[] buffer;
+        
+        if (bytesWritten != bytesRead)
+        {
+            LOG_ERROR(TAG, "Write failed: %zu/%zu bytes written", bytesWritten, bytesRead);
+            publishOTAStatus("Error: Write failed");
+            statusViewModel.setDeviceStatus(DEVICE_UPDATE_FAILED);
+            statusViewModel.setOTAActive(false); // Clear OTA flag
+            delay(2500);
+            statusViewModel.setDeviceStatus(DEVICE_STARTED);
+            return;
+        }
+        
+        totalWritten += bytesWritten;
+        remaining -= bytesWritten;
+        
+        // Yield to prevent blocking and allow other tasks to run
+        yield();
+        
+        // Small delay every few chunks to allow critical system tasks to run
+        if (totalWritten % (8 * 1024) == 0) {
+            delay(10); // Delay every 8KB to give system more time
+        }
+        
+        // Log progress every 64KB
+        if (totalWritten % (64 * 1024) == 0)
+        {
+            LOG_DEBUG(TAG, "OTA Progress: %zu/%zu bytes (%.1f%%)", 
+                     totalWritten, payload_size, 
+                     (float)totalWritten / payload_size * 100.0);
+            
+            // Publish progress update
+            char progressMsg[128];
+            snprintf(progressMsg, sizeof(progressMsg), "OTA Progress: %.1f%% (%zu/%zu bytes)", 
+                    (float)totalWritten / payload_size * 100.0, totalWritten, payload_size);
+            publishOTAStatus(progressMsg);
+        }
     }
-    else
-    {
-        LOG_WARN(TAG, "Written only: %zu/%zu", written, payload_size);
-    }
+    
+    LOG_INFO(TAG, "Written: %zu/%zu bytes", totalWritten, payload_size);
 
-    if (Update.size() == payload_size)
+    if (totalWritten == payload_size)
     {
         LOG_INFO(TAG, "Update size matches payload size: %zu", payload_size);
         publishOTAStatus("OTA update received, preparing to install...");
     }
     else
     {
-        LOG_ERROR(TAG, "Update size does not match payload size: %zu", payload_size);
+        LOG_ERROR(TAG, "Update size does not match payload size: written %zu, expected %zu", totalWritten, payload_size);
         publishOTAStatus("OTA update receive failed...");
     }
 
@@ -435,6 +504,7 @@ void NovaLogicService::handleOTAUpdate(PicoMQTT::IncomingPacket& packets)
         LOG_ERROR(TAG, "Update error: %d", Update.getError());
         publishOTAStatus("Error: Update failed!");
         statusViewModel.setDeviceStatus(DEVICE_UPDATE_FAILED);
+        statusViewModel.setOTAActive(false); // Clear OTA flag
         delay(2500);
         statusViewModel.setDeviceStatus(DEVICE_STARTED);
         return;
@@ -446,6 +516,7 @@ void NovaLogicService::handleOTAUpdate(PicoMQTT::IncomingPacket& packets)
         {
             LOG_INFO(TAG, "Update successfully completed. Rebooting...");
             publishOTAStatus("Update successfully completed.");
+            statusViewModel.setOTAActive(false); // Clear OTA flag before reboot
             statusViewModel.setDeviceStatus(DEVICE_STARTED);
             delay(2500);
             
@@ -457,6 +528,7 @@ void NovaLogicService::handleOTAUpdate(PicoMQTT::IncomingPacket& packets)
             LOG_ERROR(TAG, "Update not finished");
             publishOTAStatus("Update not finished.");
             statusViewModel.setDeviceStatus(DEVICE_UPDATE_FAILED);
+            statusViewModel.setOTAActive(false); // Clear OTA flag
             delay(2500);
             statusViewModel.setDeviceStatus(DEVICE_STARTED);
         }
@@ -466,6 +538,7 @@ void NovaLogicService::handleOTAUpdate(PicoMQTT::IncomingPacket& packets)
         LOG_ERROR(TAG, "Update error!");
         publishOTAStatus("Update error!");
         statusViewModel.setDeviceStatus(DEVICE_UPDATE_FAILED);
+        statusViewModel.setOTAActive(false); // Clear OTA flag
         delay(2500);
         statusViewModel.setDeviceStatus(DEVICE_STARTED);
     }

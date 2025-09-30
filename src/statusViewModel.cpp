@@ -1,7 +1,7 @@
 #include "statusViewModel.h"
 
 StatusViewModel::StatusViewModel()
-    : version(FIRMWARE_VERSION), deviceStatus(DEVICE_STARTED), networkStatus(NETWORK_STOPPED), connectivityStatus(CONNECTIVITY_OFFLINE), servicesStatus(SERVICES_STOPPED), dirty(true) // Start as dirty to trigger initial updates
+    : version(FIRMWARE_VERSION), deviceStatus(DEVICE_STARTED), networkStatus(NETWORK_STOPPED), connectivityStatus(CONNECTIVITY_OFFLINE), servicesStatus(SERVICES_STOPPED), otaActive(false), dirty(true) // Start as dirty to trigger initial updates
 {
     // Initialize strings
     strncpy(macAddress, "", sizeof(macAddress) - 1);
@@ -194,4 +194,19 @@ void StatusViewModel::updateStatusString()
 
     statusString[sizeof(statusString) - 1] = '\0';
     setDirty();
+}
+
+// OTA management
+void StatusViewModel::setOTAActive(bool active)
+{
+    if (otaActive != active)
+    {
+        otaActive = active;
+        setDirty();
+    }
+}
+
+bool StatusViewModel::isOTAActive() const
+{
+    return otaActive;
 }

@@ -84,6 +84,10 @@
 // TagoIO Service Constants
 #define TAGOIO_UPDATE_INTERVAL 60000               // 60 seconds
 
+// OTA Update Constants
+#define OTA_CHUNK_SIZE 8192                        // 8KB chunks for OTA writing
+#define OTA_WATCHDOG_TIMEOUT_SEC 30                // 30 seconds watchdog timeout during OTA
+
 // RGB LED Definitions --------------------------------------------------------------------
 #define RGBLED_COUNT 3
 #define RGBLED_MAX_BRIGHTNESS 128

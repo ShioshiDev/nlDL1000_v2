@@ -61,6 +61,12 @@ void TaskDisplayUpdate(void *pvParameters)
 
 void updateDisplay()
 {
+    // Skip display updates during OTA to prevent I2C conflicts and reduce system load
+    if (displayViewModel.isOTAActive())
+    {
+        return;
+    }
+    
     // Check for menu timeout
     if (displayMode == MENU && menuTimeoutTimer.TRIGGERED)
     {
@@ -187,6 +193,17 @@ void updateDisplayNormal()
             hwDisplay.drawLine(12, 55, 7, 60);
             if (deviceStatus == DEVICE_STARTED)
                 hwDisplay.drawStr(24, 58, "Connecting...");
+        }
+        if (networkStatus == NETWORK_LOST_IP)
+        {
+            hwDisplay.drawXBM(1, 48, 17, 16, bitImage_Cloud);
+            hwDisplay.setDrawColor(2);
+            hwDisplay.drawLine(7, 57, 12, 57);
+            hwDisplay.setDrawColor(1);
+            hwDisplay.drawLine(7, 55, 12, 60);
+            hwDisplay.drawLine(12, 55, 7, 60);
+            if (deviceStatus == DEVICE_STARTED)
+                hwDisplay.drawStr(24, 58, "Lost IP...");
         }
         if ((networkStatus == NETWORK_CONNECTED_IP) && (connectivityStatus < CONNECTIVITY_ONLINE))
         {
