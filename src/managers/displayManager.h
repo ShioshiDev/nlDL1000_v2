@@ -15,6 +15,10 @@
 #include "statusViewModel.h"
 #include "menuManager.h"
 
+// Forward declarations for managers
+class ModbusMonitorManager;
+extern ModbusMonitorManager modbusMonitorManager;
+
 void TaskDisplayUpdate(void *pvParameters);
 void TaskRefreshDisplay(void *pvParameters);
 

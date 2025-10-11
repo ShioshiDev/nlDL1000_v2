@@ -21,6 +21,7 @@ void updateLEDs()
 		NetworkStatus currentNetworkStatus = displayViewModel.getNetworkStatus();
 		ConnectivityStatus currentConnectivityStatus = displayViewModel.getConnectivityStatus();
 		ServicesStatus currentServiceStatus = displayViewModel.getServicesStatus();
+		ModbusMonitorStatus currentModbusStatus = displayViewModel.getModbusStatus();
 
 		switch (currentDeviceStatus)
 		{
@@ -35,6 +36,26 @@ void updateLEDs()
 			break;
 		default:
 			hwLEDs.setLEDColour(LED_SYSTEM, CRGB::White);
+			break;
+		}
+
+		// Modbus LED shows Modbus activity/status
+		switch (currentModbusStatus)
+		{
+		case MODBUS_INACTIVE:
+			hwLEDs.setLEDColour(LED_MID, CRGB::Black); // OFF
+			break;
+		case MODBUS_ACTIVE:
+			hwLEDs.setLEDColour(LED_MID, CRGB::Blue); // Activity detected
+			break;
+		case MODBUS_VALID:
+			hwLEDs.setLEDColour(LED_MID, CRGB::Green); // Valid data
+			break;
+		case MODBUS_INVALID:
+			hwLEDs.setLEDColour(LED_MID, CRGB::Red); // Invalid/bad data
+			break;
+		default:
+			hwLEDs.setLEDColour(LED_MID, CRGB::Black);
 			break;
 		}
 
@@ -110,7 +131,11 @@ void updateLEDs()
 
 LEDManager::LEDManager()
 {
+#ifdef USE_WS2811_LED
+	FastLED.addLeds<WS2811, BOARD_PIN_RGBLED_STRIP, RGB>(_rgbLEDs, RGBLED_COUNT);
+#else
 	FastLED.addLeds<NEOPIXEL, BOARD_PIN_RGBLED_STRIP>(_rgbLEDs, RGBLED_COUNT);
+#endif
 	init();
 }
 

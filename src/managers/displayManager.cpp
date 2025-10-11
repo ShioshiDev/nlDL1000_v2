@@ -147,12 +147,32 @@ void updateDisplayNormal()
         hwDisplay.drawStr(0, 20, DEVICE_FRIENDLY_ID);
         hwDisplay.drawHLine(4, 22, 120);
         hwDisplay.setFont(u8g2_font_5x7_tr);
-        hwDisplay.drawStr(4, 34, "MAC: ");
-        int strWidth = hwDisplay.getStrWidth(displayViewModel.getMacAddress());
-        hwDisplay.drawStr((128 - strWidth - 4), 34, displayViewModel.getMacAddress());
-        hwDisplay.drawStr(4, 44, "Serial Number: ");
-        strWidth = hwDisplay.getStrWidth(displayViewModel.getSerialNumber());
-        hwDisplay.drawStr((128 - strWidth - 4), 44, displayViewModel.getSerialNumber());
+        // Display Modbus status
+        ModbusMonitorStatus modbusStatus = displayViewModel.getModbusStatus();
+        hwDisplay.drawStr(4, 34, "Modbus: ");
+        const char* modbusStatusStr;
+        switch (modbusStatus) {
+            case MODBUS_INACTIVE: modbusStatusStr = "INACTIVE"; break;
+            case MODBUS_ACTIVE: modbusStatusStr = "ACTIVE"; break;
+            case MODBUS_VALID: modbusStatusStr = "VALID"; break;
+            case MODBUS_INVALID: modbusStatusStr = "INVALID"; break;
+            default: modbusStatusStr = "UNKNOWN"; break;
+        }
+        int strWidth = hwDisplay.getStrWidth(modbusStatusStr);
+        hwDisplay.drawStr((128 - strWidth - 4), 34, modbusStatusStr);
+        
+        // Display generator data
+        hwDisplay.drawStr(4, 44, "Gen: ");
+        char genDataStr[32];
+        float genWatts = modbusMonitorManager.getGeneratorTotalWatts();
+        float genVoltage = modbusMonitorManager.getGeneratorL1NVoltage();
+        if (genWatts != 0.0f || genVoltage != 0.0f) {
+            snprintf(genDataStr, sizeof(genDataStr), "%.0fW %.1fV", genWatts, genVoltage);
+        } else {
+            snprintf(genDataStr, sizeof(genDataStr), "No Data");
+        }
+        strWidth = hwDisplay.getStrWidth(genDataStr);
+        hwDisplay.drawStr((128 - strWidth - 4), 44, genDataStr);
 
         DeviceStatus deviceStatus = displayViewModel.getDeviceStatus();
         NetworkStatus networkStatus = displayViewModel.getNetworkStatus();

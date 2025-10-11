@@ -18,6 +18,7 @@ public:
     NetworkStatus getNetworkStatus() const;
     ConnectivityStatus getConnectivityStatus() const;
     ServicesStatus getServicesStatus() const;
+    ModbusMonitorStatus getModbusStatus() const;
     const char *getStatusString() const;
 
     // Setters
@@ -27,6 +28,7 @@ public:
     void setNetworkStatus(NetworkStatus status);
     void setConnectivityStatus(ConnectivityStatus status);
     void setServicesStatus(ServicesStatus status);
+    void setModbusStatus(ModbusMonitorStatus status);
     void setStatusString(const char *status);
     
     // OTA management
@@ -51,6 +53,7 @@ private:
     NetworkStatus networkStatus;
     ConnectivityStatus connectivityStatus;
     ServicesStatus servicesStatus;
+    ModbusMonitorStatus modbusStatus;
     char statusString[16]; // Aggregated status string
 
     // OTA status

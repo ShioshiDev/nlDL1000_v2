@@ -22,12 +22,14 @@
 #include "managers/connectivityManager.h"
 #include "managers/servicesManager.h"
 #include "managers/loggingManager.h"
+#include "managers/modbusMonitorManager.h"
 
 void coreSetup();
 void coreLoop();
 
 // External manager references
 extern ServicesManager servicesManager;
+extern ModbusMonitorManager modbusMonitorManager;
 extern LoggingManager loggingManager;
 
 // Task Functions
@@ -58,6 +60,10 @@ void handleOption7();
 void handleOption8();
 void handleOption9();
 void runTestCodeBlock();
+
+// RS485 Debug Functions
+void handleOption7(); // RS485 Debug Toggle
+void updateRS485Debug();
 
 void handleExternalMQTTCommand(const char *topic, const char *payload);
 

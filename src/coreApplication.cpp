@@ -33,8 +33,13 @@ LoggingManager loggingManager;
 NetworkingManager networkingManager(displayViewModel);
 ConnectivityManager connectivityManager(networkingManager, displayViewModel);
 ServicesManager servicesManager(connectivityManager, displayViewModel);
+ModbusMonitorManager modbusMonitorManager(displayViewModel);
 
 bool bIsRunningTestBlock = false;
+
+// RS485 Debug Variables
+bool rs485DebugEnabled = false;
+bool modbusWasRunningBeforeDebug = false;
 
 // Factory Reset Variables
 bool factoryResetComboPressed = false;
@@ -80,6 +85,10 @@ void coreSetup()
 	digitalWrite(BOARD_PIN_OLED_SCREEN_RESET, LOW);
 	vTaskDelay(10);
 	digitalWrite(BOARD_PIN_OLED_SCREEN_RESET, LOW);
+	
+	// Quick reset of the LED strip
+	pinMode(BOARD_PIN_RGBLED_STRIP, OUTPUT);
+	digitalWrite(BOARD_PIN_RGBLED_STRIP, LOW);
 
 	// Disable unused SPI device selection pins
 	pinMode(BOARD_PIN_ETHERNET_1_CS, OUTPUT);
@@ -103,6 +112,8 @@ void coreSetup()
 	connectivityManager.begin();
 	LOG_INFO(TAG, "Initializing Services Manager");
 	servicesManager.begin();
+	LOG_INFO(TAG, "Initializing Modbus Monitor Manager");
+	modbusMonitorManager.begin();
 
 	// Setup connectivity change callback for immediate service state updates
 	connectivityManager.setCallback([](ConnectivityStatus status) {
@@ -138,6 +149,9 @@ void coreLoop()
 
 	// Check for factory reset combo
 	checkFactoryResetCombo();
+	
+	// Update RS485 debug monitoring
+	updateRS485Debug();
 }
 
 // Task Functions -----------------------------------------------------------------------
@@ -151,6 +165,7 @@ void TaskManagersUpdate(void *pvParameters)
 		networkingManager.loop();
 		connectivityManager.loop();
 		servicesManager.loop();
+		modbusMonitorManager.loop();
 
 		// Small delay to prevent task from hogging CPU
 		vTaskDelay(pdMS_TO_TICKS(50));
@@ -502,7 +517,7 @@ void showSerialMenu()
 	Serial.println(F("4. Set ModBus Baud Rate"));
 	Serial.println(F("5. Set ModBus Slave ID"));
 	Serial.println(F("6. Toggle ModBus Debug Output"));
-	Serial.println(F("7. "));
+	Serial.println(F("7. Toggle RS485 Debug Output"));
 	Serial.println(F("8. "));
 	Serial.println(F("9. "));
 	// Add more options as needed
@@ -569,30 +584,103 @@ void handleOption2()
 void handleOption3()
 {
 	Serial.println(F("Executing Option 3"));
-	Serial.println(F("ModBus monitoring has been removed from this firmware."));
+	
+	if (rs485DebugEnabled) {
+		Serial.println(F("ModBus monitoring is currently DISABLED due to active RS485 debug mode."));
+		Serial.println(F("Disable RS485 debug (option 7) to re-enable ModBus monitoring."));
+	} else {
+		ModbusMonitorStatus status = modbusMonitorManager.getModbusStatus();
+		Serial.print(F("ModBus Status: "));
+		switch (status) {
+			case MODBUS_INACTIVE: Serial.println(F("INACTIVE")); break;
+			case MODBUS_ACTIVE: Serial.println(F("ACTIVE")); break;
+			case MODBUS_VALID: Serial.println(F("VALID")); break;
+			case MODBUS_INVALID: Serial.println(F("INVALID")); break;
+			default: Serial.println(F("UNKNOWN")); break;
+		}
+		
+		if (modbusMonitorManager.isMonitoring()) {
+			Serial.printf("Total Frames: %lu, Valid: %lu, Invalid: %lu\n",
+				modbusMonitorManager.getFramesReceived(),
+				modbusMonitorManager.getValidFrames(),
+				modbusMonitorManager.getInvalidFrames());
+		}
+	}
 }
 
 void handleOption4()
 {
 	Serial.println(F("Executing Option 4"));
-	Serial.println(F("ModBus baud rate setting has been removed from this firmware."));
+	
+	if (rs485DebugEnabled) {
+		Serial.println(F("ModBus configuration is unavailable - RS485 debug mode is active."));
+		Serial.println(F("Disable RS485 debug (option 7) to modify ModBus settings."));
+	} else {
+		ModbusConfig config = modbusMonitorManager.getConfiguration();
+		Serial.printf("Current ModBus Baud Rate: %lu\n", config.baudRate);
+		Serial.println(F("Note: Baud rate changes require service restart."));
+	}
 }
 
 void handleOption5()
 {
 	Serial.println(F("Executing Option 5"));
-	Serial.println(F("ModBus slave ID setting has been removed from this firmware."));
+	
+	if (rs485DebugEnabled) {
+		Serial.println(F("ModBus configuration is unavailable - RS485 debug mode is active."));
+		Serial.println(F("Disable RS485 debug (option 7) to modify ModBus settings."));
+	} else {
+		ModbusConfig config = modbusMonitorManager.getConfiguration();
+		Serial.printf("Current ModBus Slave ID: 0x%02X (%d)\n", config.slaveId, config.slaveId);
+		Serial.println(F("Note: Slave ID changes require service restart."));
+	}
 }
 
 void handleOption6()
 {
 	Serial.println(F("Executing Option 6"));
-	Serial.println(F("ModBus debug output setting has been removed from this firmware."));
+	
+	if (rs485DebugEnabled) {
+		Serial.println(F("ModBus debug configuration is unavailable - RS485 debug mode is active."));
+		Serial.println(F("Disable RS485 debug (option 7) to modify ModBus debug settings."));
+	} else {
+		ModbusConfig config = modbusMonitorManager.getConfiguration();
+		Serial.printf("ModBus Debug Output - Serial: %s, File: %s, MQTT: %s\n",
+			config.outputToSerial ? "ON" : "OFF",
+			config.outputToFile ? "ON" : "OFF",
+			config.outputToMQTT ? "ON" : "OFF");
+		Serial.println(F("Note: Debug settings changes take effect immediately."));
+	}
 }
 
 void handleOption7()
 {
 	Serial.println(F("Executing Option 7"));
+	
+	// Toggle RS485 Debug
+	rs485DebugEnabled = !rs485DebugEnabled;
+	
+	if (rs485DebugEnabled) {
+		// Stop Modbus service to prevent interference
+		modbusWasRunningBeforeDebug = modbusMonitorManager.isMonitoring();
+		if (modbusWasRunningBeforeDebug) {
+			Serial.println(F("Stopping Modbus service to prevent RS485 interference..."));
+			modbusMonitorManager.stop();
+			delay(500); // Give it time to stop
+		}
+		Serial.println(F("RS485 Debug Output ENABLED - All received data will be shown"));
+		Serial.println(F("Note: Modbus service has been temporarily disabled"));
+	} else {
+		Serial.println(F("RS485 Debug Output DISABLED"));
+		// Restart Modbus service if it was running before
+		if (modbusWasRunningBeforeDebug) {
+			Serial.println(F("Restarting Modbus service..."));
+			modbusMonitorManager.begin();
+			modbusWasRunningBeforeDebug = false;
+		} else {
+			Serial.println(F("Modbus service was not running before debug - leaving it stopped"));
+		}
+	}
 }
 
 void handleOption8()
@@ -730,4 +818,75 @@ void handleExternalMQTTCommand(const char *topic, const char *payload)
 
 	// Add any other custom command processing here
 	LOG_WARN(TAG, "Unhandled external MQTT command: %s", payload);
+}
+
+// RS485 Debug Functions ------------------------------------------------------------------
+
+void updateRS485Debug()
+{
+	static bool serialInitialized = false;
+	
+	if (!rs485DebugEnabled) {
+		// Clean up when debug is disabled
+		if (serialInitialized) {
+			Serial2.end(); // Close the serial port
+			serialInitialized = false;
+			Serial.println(F("[RS485 DEBUG] Serial port closed"));
+		}
+		return;
+	}
+	
+	// Initialize Serial2 for RS485 monitoring if not already done
+	if (!serialInitialized) {
+		// Initialize the Modbus serial port to start in receive mode
+		pinMode(BOARD_PIN_RS485_DE_RE, OUTPUT);
+		digitalWrite(BOARD_PIN_RS485_DE_RE, LOW);
+		pinMode(BOARD_PIN_RS485_RX_EN, OUTPUT);
+		digitalWrite(BOARD_PIN_RS485_RX_EN, LOW);
+
+		Serial2.begin(115200, SERIAL_8N1, BOARD_PIN_RS485_RX, BOARD_PIN_RS485_TX);
+		Serial2.flush();
+		vTaskDelay(250 / portTICK_PERIOD_MS);
+		serialInitialized = true;
+		Serial.println(F("[RS485 DEBUG] Serial port initialized for monitoring"));
+		Serial.println(F("[RS485 DEBUG] RX Pin: 18, TX Pin: 17, Baud: 115200"));
+	}
+	
+	// Check if there's data available on Serial2 (RS485 port)
+	if (Serial2.available()) {
+		Serial.print(F("[RS485 RX] "));
+		
+		// Add timestamp
+		Serial.print(millis());
+		Serial.print(F("ms: "));
+		
+		String hexData = "";
+		String asciiData = "";
+		
+		// Read and display all available bytes
+		while (Serial2.available()) {
+			uint8_t receivedByte = Serial2.read();
+			
+			// Build hex string
+			if (receivedByte < 0x10) {
+				hexData += "0";
+			}
+			hexData += String(receivedByte, HEX);
+			hexData += " ";
+			
+			// Build ASCII string (printable chars only)
+			if (receivedByte >= 32 && receivedByte <= 126) {
+				asciiData += (char)receivedByte;
+			} else {
+				asciiData += ".";
+			}
+		}
+		
+		// Print formatted output
+		Serial.print("HEX: ");
+		Serial.print(hexData);
+		Serial.print("ASCII: '");
+		Serial.print(asciiData);
+		Serial.println("'");
+	}
 }

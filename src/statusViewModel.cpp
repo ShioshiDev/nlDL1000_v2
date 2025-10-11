@@ -1,7 +1,7 @@
 #include "statusViewModel.h"
 
 StatusViewModel::StatusViewModel()
-    : version(FIRMWARE_VERSION), deviceStatus(DEVICE_STARTED), networkStatus(NETWORK_STOPPED), connectivityStatus(CONNECTIVITY_OFFLINE), servicesStatus(SERVICES_STOPPED), otaActive(false), dirty(true) // Start as dirty to trigger initial updates
+    : version(FIRMWARE_VERSION), deviceStatus(DEVICE_STARTED), networkStatus(NETWORK_STOPPED), connectivityStatus(CONNECTIVITY_OFFLINE), servicesStatus(SERVICES_STOPPED), modbusStatus(MODBUS_INACTIVE), otaActive(false), dirty(true) // Start as dirty to trigger initial updates
 {
     // Initialize strings
     strncpy(macAddress, "", sizeof(macAddress) - 1);
@@ -52,7 +52,10 @@ ServicesStatus StatusViewModel::getServicesStatus() const
     return servicesStatus;
 }
 
-
+ModbusMonitorStatus StatusViewModel::getModbusStatus() const
+{
+    return modbusStatus;
+}
 
 const char *StatusViewModel::getStatusString() const
 {
@@ -120,7 +123,15 @@ void StatusViewModel::setServicesStatus(ServicesStatus status)
     }
 }
 
-
+void StatusViewModel::setModbusStatus(ModbusMonitorStatus status)
+{
+    if (modbusStatus != status)
+    {
+        modbusStatus = status;
+        setDirty();
+        updateStatusString();
+    }
+}
 
 void StatusViewModel::setStatusString(const char *status)
 {
