@@ -1,4 +1,4 @@
-# NovaLogic DL1000 Factory Device
+# NovaLogic DL1000 v1.2 - Full Application
 
 ## Project Overview
 An ESP32 Arduino PlatformIO project in C++.

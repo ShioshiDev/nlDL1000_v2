@@ -264,6 +264,8 @@ void initDisplay()
 	if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE)
 	{
 		hwDisplay.begin();
+		hwDisplay.clear();
+		vTaskDelay(pdMS_TO_TICKS(50));
 
 		hwDisplay.firstPage();
 		do
@@ -288,7 +290,7 @@ void initDisplay()
 	}
 	else
 	{
-		LOG_WARN(TAG, "updateDateTime - Failed to take i2cMutex");
+		LOG_WARN(TAG, "initDisplay - Failed to take i2cMutex");
 	}
 }
 
